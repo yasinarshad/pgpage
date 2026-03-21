@@ -107,6 +107,35 @@ export default function Home() {
     loadTables();
   }, []);
 
+  // Listen for hash changes (manual URL edits, direct navigation, back/forward)
+  useEffect(() => {
+    function handleHashChange() {
+      const { schema, table, id } = parseHash();
+      if (schema && SCHEMAS.some((s) => s.name === schema)) {
+        setSelectedSchema(schema);
+        if (table) {
+          setSelectedTable(table);
+          // Load rows and select the specific row
+          if (id) {
+            supabase.rpc("pg_query_table", {
+              schema_name: schema,
+              table_name: table,
+              row_limit: 100,
+            }).then(({ data }) => {
+              if (data) {
+                setRows(data as TableRow[]);
+                const match = (data as TableRow[]).find((r) => r.id === id);
+                if (match) setSelectedRow(match);
+              }
+            });
+          }
+        }
+      }
+    }
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
   // Load rows when table is selected
   const loadRows = useCallback(async (schema: SchemaName, table: string) => {
     setLoading(true);
