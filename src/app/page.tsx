@@ -80,6 +80,8 @@ export default function Home() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showRowList, setShowRowList] = useState(true);
   const [showToc, setShowToc] = useState(true);
+  const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Load tables for each schema
   useEffect(() => {
@@ -172,7 +174,32 @@ export default function Home() {
     );
   }, [selectedSchema, selectedTable, selectedRow, initialized]);
 
-  const sortedRows = [...rows].sort((a, b) => {
+  // Collect all unique tags from current rows
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    rows.forEach((row) => {
+      if (Array.isArray(row.tags)) {
+        (row.tags as string[]).forEach((t) => tagSet.add(t));
+      }
+    });
+    return [...tagSet].sort();
+  }, [rows]);
+
+  // Filter then sort
+  const filteredRows = rows.filter((row) => {
+    if (filterTag && !(Array.isArray(row.tags) && (row.tags as string[]).includes(filterTag))) {
+      return false;
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const title = String(row.title || "").toLowerCase();
+      const content = String(row.content || row.summary || row.decision || row.description || "").toLowerCase();
+      if (!title.includes(q) && !content.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const sortedRows = [...filteredRows].sort((a, b) => {
     if (sortBy === "title") {
       return String(a.title || "").localeCompare(String(b.title || ""));
     }
@@ -294,10 +321,12 @@ export default function Home() {
       {showRowList && selectedTable && (
         <div className="w-72 flex-shrink-0 border-r border-zinc-800 bg-zinc-925 overflow-y-auto">
           <div className="p-3 border-b border-zinc-800">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <div>
                 <h2 className="text-sm font-semibold text-zinc-300">{selectedTable}</h2>
-                <p className="text-xs text-zinc-500">{rows.length} entries</p>
+                <p className="text-xs text-zinc-500">
+                  {sortedRows.length}{filteredRows.length !== rows.length ? ` / ${rows.length}` : ""} entries
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -318,6 +347,39 @@ export default function Home() {
                 </select>
               </div>
             </div>
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-zinc-800 text-zinc-200 text-xs rounded px-2 py-1.5 border border-zinc-700 outline-none placeholder-zinc-500 mb-2"
+            />
+            {/* Tag filter */}
+            {allTags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {filterTag && (
+                  <button
+                    onClick={() => setFilterTag(null)}
+                    className="px-2 py-0.5 rounded text-xs bg-blue-600 text-white"
+                  >
+                    {filterTag} ✕
+                  </button>
+                )}
+                {!filterTag && allTags.slice(0, 12).map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => setFilterTag(tag)}
+                    className="px-1.5 py-0.5 rounded text-xs bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+                  >
+                    {tag}
+                  </button>
+                ))}
+                {!filterTag && allTags.length > 12 && (
+                  <span className="text-xs text-zinc-600 py-0.5">+{allTags.length - 12}</span>
+                )}
+              </div>
+            )}
           </div>
           {loading ? (
             <div className="p-4 text-zinc-500 text-sm">Loading...</div>
