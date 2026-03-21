@@ -75,7 +75,7 @@ export default function Home() {
   const [rows, setRows] = useState<TableRow[]>([]);
   const [selectedRow, setSelectedRow] = useState<TableRow | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "modified" | "title">("newest");
   const [initialized, setInitialized] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showRowList, setShowRowList] = useState(true);
@@ -192,9 +192,12 @@ export default function Home() {
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
+      const id = String(row.id || "");
+      if (q === id) return true;
       const title = String(row.title || "").toLowerCase();
       const content = String(row.content || row.summary || row.decision || row.description || "").toLowerCase();
-      if (!title.includes(q) && !content.includes(q)) return false;
+      const tags = Array.isArray(row.tags) ? (row.tags as string[]).join(" ").toLowerCase() : "";
+      if (!title.includes(q) && !content.includes(q) && !tags.includes(q)) return false;
     }
     return true;
   });
@@ -202,6 +205,11 @@ export default function Home() {
   const sortedRows = [...filteredRows].sort((a, b) => {
     if (sortBy === "title") {
       return String(a.title || "").localeCompare(String(b.title || ""));
+    }
+    if (sortBy === "modified") {
+      const modA = String(a.updated_at || a.created_at || 0);
+      const modB = String(b.updated_at || b.created_at || 0);
+      return modB.localeCompare(modA);
     }
     const dateA = String(a.created_at || a.id || 0);
     const dateB = String(b.created_at || b.id || 0);
@@ -338,11 +346,12 @@ export default function Home() {
                 </button>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as "newest" | "oldest" | "title")}
+                  onChange={(e) => setSortBy(e.target.value as "newest" | "oldest" | "modified" | "title")}
                   className="bg-zinc-800 text-zinc-400 text-xs rounded px-2 py-1 border border-zinc-700 outline-none"
                 >
                   <option value="newest">Newest</option>
                   <option value="oldest">Oldest</option>
+                  <option value="modified">Last Modified</option>
                   <option value="title">A-Z</option>
                 </select>
               </div>
