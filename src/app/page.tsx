@@ -357,26 +357,25 @@ export default function Home() {
             />
             {/* Tag filter */}
             {allTags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {filterTag && (
+              <div>
+                {filterTag ? (
                   <button
                     onClick={() => setFilterTag(null)}
                     className="px-2 py-0.5 rounded text-xs bg-blue-600 text-white"
                   >
                     {filterTag} ✕
                   </button>
-                )}
-                {!filterTag && allTags.slice(0, 12).map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => setFilterTag(tag)}
-                    className="px-1.5 py-0.5 rounded text-xs bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+                ) : (
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) setFilterTag(e.target.value); }}
+                    className="w-full bg-zinc-800 text-zinc-400 text-xs rounded px-2 py-1.5 border border-zinc-700 outline-none"
                   >
-                    {tag}
-                  </button>
-                ))}
-                {!filterTag && allTags.length > 12 && (
-                  <span className="text-xs text-zinc-600 py-0.5">+{allTags.length - 12}</span>
+                    <option value="">Filter by tag ({allTags.length})</option>
+                    {allTags.map((tag) => (
+                      <option key={tag} value={tag}>{tag}</option>
+                    ))}
+                  </select>
                 )}
               </div>
             )}
