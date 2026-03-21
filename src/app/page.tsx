@@ -1,0 +1,441 @@
+"use client";
+
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { supabase, SCHEMAS, type SchemaName } from "@/lib/supabase";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+type TableRow = Record<string, unknown>;
+
+type TocItem = { level: number; text: string; slug: string };
+
+function extractToc(markdown: string): TocItem[] {
+  const lines = markdown.split("\n");
+  const toc: TocItem[] = [];
+  let inCodeBlock = false;
+  for (const line of lines) {
+    if (line.startsWith("```")) { inCodeBlock = !inCodeBlock; continue; }
+    if (inCodeBlock) continue;
+    const match = line.match(/^(#{1,4})\s+(.+)/);
+    if (match) {
+      const level = match[1].length;
+      const text = match[2].replace(/[*`_~]/g, "");
+      const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      toc.push({ level, text, slug });
+    }
+  }
+  return toc;
+}
+
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function getContentField(row: TableRow): string | null {
+  for (const key of ["content", "summary", "decision", "description", "question", "transcript"]) {
+    if (row[key] && typeof row[key] === "string" && (row[key] as string).length > 50) {
+      return key;
+    }
+  }
+  return null;
+}
+
+function getTitle(row: TableRow): string {
+  if (row.title && typeof row.title === "string") return row.title;
+  const content = getContentField(row);
+  if (content && typeof row[content] === "string") {
+    return (row[content] as string).slice(0, 60) + "...";
+  }
+  return `Row ${row.id}`;
+}
+
+function parseHash(): { schema?: SchemaName; table?: string; id?: number } {
+  if (typeof window === "undefined") return {};
+  const hash = window.location.hash.slice(1); // remove #
+  if (!hash) return {};
+  const parts = hash.split("/");
+  return {
+    schema: parts[0] as SchemaName | undefined,
+    table: parts[1],
+    id: parts[2] ? parseInt(parts[2], 10) : undefined,
+  };
+}
+
+function setHash(schema: string, table?: string, id?: number) {
+  const parts = [schema];
+  if (table) parts.push(table);
+  if (id != null) parts.push(String(id));
+  window.history.replaceState(null, "", `#${parts.join("/")}`);
+}
+
+export default function Home() {
+  const [tables, setTables] = useState<Record<string, string[]>>({});
+  const [selectedSchema, setSelectedSchema] = useState<SchemaName>("memdb");
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [rows, setRows] = useState<TableRow[]>([]);
+  const [selectedRow, setSelectedRow] = useState<TableRow | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
+  const [initialized, setInitialized] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [showRowList, setShowRowList] = useState(true);
+  const [showToc, setShowToc] = useState(true);
+
+  // Load tables for each schema
+  useEffect(() => {
+    async function loadTables() {
+      const result: Record<string, string[]> = {};
+      for (const schema of SCHEMAS) {
+        const { data } = await supabase.rpc("pg_tables_list", {
+          schema_name: schema.name,
+        });
+        if (data) {
+          result[schema.name] = data;
+        }
+      }
+      setTables(result);
+
+      // Restore state from URL hash after tables are loaded
+      const { schema, table, id } = parseHash();
+      if (schema && SCHEMAS.some((s) => s.name === schema)) {
+        setSelectedSchema(schema);
+        if (table) setSelectedTable(table);
+        // id will be restored after rows load
+      }
+      setInitialized(true);
+    }
+    loadTables();
+  }, []);
+
+  // Load rows when table is selected
+  const loadRows = useCallback(async (schema: SchemaName, table: string) => {
+    setLoading(true);
+    const { data, error } = await supabase.rpc("pg_query_table", {
+      schema_name: schema,
+      table_name: table,
+      row_limit: 100,
+    });
+    if (!error && data) {
+      setRows(data as TableRow[]);
+      // Restore selected row from hash
+      const { id } = parseHash();
+      if (id) {
+        const match = (data as TableRow[]).find((r) => r.id === id);
+        if (match) setSelectedRow(match);
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTable) return;
+    setSelectedRow(null);
+    loadRows(selectedSchema, selectedTable);
+  }, [selectedSchema, selectedTable, loadRows]);
+
+  // Update URL hash when selection changes
+  useEffect(() => {
+    if (!initialized) return;
+    setHash(
+      selectedSchema,
+      selectedTable || undefined,
+      selectedRow?.id != null ? (selectedRow.id as number) : undefined
+    );
+  }, [selectedSchema, selectedTable, selectedRow, initialized]);
+
+  const sortedRows = [...rows].sort((a, b) => {
+    if (sortBy === "title") {
+      return String(a.title || "").localeCompare(String(b.title || ""));
+    }
+    const dateA = String(a.created_at || a.id || 0);
+    const dateB = String(b.created_at || b.id || 0);
+    return sortBy === "newest" ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
+  });
+
+  const contentField = selectedRow ? getContentField(selectedRow) : null;
+  const contentStr = selectedRow && contentField ? String(selectedRow[contentField]) : "";
+  const toc = useMemo(() => extractToc(contentStr), [contentStr]);
+
+  // Custom heading renderer that adds id for TOC linking
+  const headingComponents = useMemo(() => ({
+    h1: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => {
+      const text = String(children);
+      return <h1 id={slugify(text)} {...props}>{children}</h1>;
+    },
+    h2: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => {
+      const text = String(children);
+      return <h2 id={slugify(text)} {...props}>{children}</h2>;
+    },
+    h3: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => {
+      const text = String(children);
+      return <h3 id={slugify(text)} {...props}>{children}</h3>;
+    },
+    h4: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => {
+      const text = String(children);
+      return <h4 id={slugify(text)} {...props}>{children}</h4>;
+    },
+  }), []);
+
+  // Refresh current table
+  const handleRefresh = () => {
+    if (selectedTable) {
+      loadRows(selectedSchema, selectedTable);
+    }
+  };
+
+  return (
+    <div className="flex h-screen">
+      {/* Panel toggle bar */}
+      <div className="flex-shrink-0 w-10 bg-zinc-900 border-r border-zinc-800 flex flex-col items-center pt-3 gap-2">
+        <button
+          onClick={() => setShowSidebar(!showSidebar)}
+          className={`w-7 h-7 rounded flex items-center justify-center text-xs ${showSidebar ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:bg-zinc-800"}`}
+          title="Toggle schemas/tables"
+        >
+          ☰
+        </button>
+        <button
+          onClick={() => setShowRowList(!showRowList)}
+          className={`w-7 h-7 rounded flex items-center justify-center text-xs ${showRowList ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:bg-zinc-800"}`}
+          title="Toggle row list"
+        >
+          ≡
+        </button>
+        <button
+          onClick={() => setShowToc(!showToc)}
+          className={`w-7 h-7 rounded flex items-center justify-center text-xs ${showToc ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:bg-zinc-800"}`}
+          title="Toggle table of contents"
+        >
+          ¶
+        </button>
+      </div>
+
+      {/* Sidebar */}
+      {showSidebar && (
+      <div className="w-56 flex-shrink-0 border-r border-zinc-800 bg-zinc-900 overflow-y-auto">
+        <div className="p-4 border-b border-zinc-800">
+          <h1 className="text-lg font-bold text-zinc-100">pgpage</h1>
+          <p className="text-xs text-zinc-500 mt-1">Postgres Markdown Viewer</p>
+        </div>
+
+        {/* Schema tabs */}
+        <div className="flex flex-wrap gap-1 p-2 border-b border-zinc-800">
+          {SCHEMAS.map((s) => (
+            <button
+              key={s.name}
+              onClick={() => {
+                setSelectedSchema(s.name);
+                setSelectedTable(null);
+                setSelectedRow(null);
+                setRows([]);
+              }}
+              className={`px-2 py-1 rounded text-xs ${
+                selectedSchema === s.name
+                  ? "bg-zinc-700 text-zinc-100"
+                  : "text-zinc-400 hover:bg-zinc-800"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tables list */}
+        <div className="p-2">
+          {(tables[selectedSchema] || [])
+            .filter((t) => !t.startsWith("directus_") && t !== "schema_changes")
+            .map((table) => (
+              <button
+                key={table}
+                onClick={() => setSelectedTable(table)}
+                className={`w-full text-left px-3 py-1.5 rounded text-sm ${
+                  selectedTable === table
+                    ? "bg-zinc-700 text-zinc-100"
+                    : "text-zinc-400 hover:bg-zinc-800"
+                }`}
+              >
+                {table}
+              </button>
+            ))}
+        </div>
+      </div>
+      )}
+
+      {/* Row list */}
+      {showRowList && selectedTable && (
+        <div className="w-72 flex-shrink-0 border-r border-zinc-800 bg-zinc-925 overflow-y-auto">
+          <div className="p-3 border-b border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-300">{selectedTable}</h2>
+                <p className="text-xs text-zinc-500">{rows.length} entries</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRefresh}
+                  className="text-zinc-500 hover:text-zinc-300 text-sm"
+                  title="Refresh"
+                >
+                  ↻
+                </button>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as "newest" | "oldest" | "title")}
+                  className="bg-zinc-800 text-zinc-400 text-xs rounded px-2 py-1 border border-zinc-700 outline-none"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="title">A-Z</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          {loading ? (
+            <div className="p-4 text-zinc-500 text-sm">Loading...</div>
+          ) : (
+            sortedRows.map((row) => (
+              <button
+                key={row.id as number}
+                onClick={() => setSelectedRow(row)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  const path = `${selectedSchema}.${selectedTable}.id=${row.id}`;
+                  navigator.clipboard.writeText(path);
+                  const el = e.currentTarget;
+                  el.style.outline = "1px solid #60a5fa";
+                  setTimeout(() => { el.style.outline = ""; }, 500);
+                }}
+                title={`Right-click to copy: ${selectedSchema}.${selectedTable}.id=${row.id}`}
+                className={`w-full text-left px-3 py-2 border-b border-zinc-800/50 ${
+                  selectedRow?.id === row.id
+                    ? "bg-zinc-800"
+                    : "hover:bg-zinc-800/50"
+                }`}
+              >
+                <div className="text-sm text-zinc-200 truncate">
+                  {getTitle(row)}
+                </div>
+                <div className="text-xs text-zinc-500 mt-0.5">
+                  {row.created_at
+                    ? new Date(row.created_at as string).toLocaleDateString()
+                    : `#${row.id}`}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Content area */}
+      <div className="flex-1 overflow-y-auto">
+        {selectedRow && contentField ? (
+          <div className="max-w-4xl mx-auto px-8 py-6">
+            {/* Properties bar */}
+            <div className="mb-6 pb-4 border-b border-zinc-800">
+              {Boolean(selectedRow.title) && (
+                <h1 className="text-2xl font-bold text-zinc-100 mb-3">
+                  {String(selectedRow.title)}
+                </h1>
+              )}
+              <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
+                {selectedRow.id != null && (
+                  <span
+                    className="cursor-pointer hover:text-zinc-300"
+                    onClick={() => {
+                      const url = `${window.location.origin}${window.location.pathname}#${selectedSchema}/${selectedTable}/${selectedRow.id}`;
+                      navigator.clipboard.writeText(url);
+                    }}
+                    title="Click to copy URL"
+                  >
+                    {selectedSchema}/{selectedTable}/{String(selectedRow.id)}
+                  </span>
+                )}
+                {Boolean(selectedRow.created_at) && (
+                  <span>
+                    Created:{" "}
+                    {new Date(String(selectedRow.created_at)).toLocaleString()}
+                  </span>
+                )}
+                {Boolean(selectedRow.platform) && (
+                  <span>Platform: {String(selectedRow.platform)}</span>
+                )}
+                {Boolean(selectedRow.topic) && (
+                  <span>Topic: {String(selectedRow.topic)}</span>
+                )}
+              </div>
+              {Array.isArray(selectedRow.tags) && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {(selectedRow.tags as string[]).map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded text-xs"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Rendered markdown */}
+            <div className="pgpage-prose">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={headingComponents}>
+                {contentStr}
+              </ReactMarkdown>
+            </div>
+          </div>
+        ) : selectedRow ? (
+          <div className="max-w-4xl mx-auto px-8 py-6">
+            <h2 className="text-lg font-semibold mb-4">
+              {getTitle(selectedRow)}
+            </h2>
+            <pre className="text-sm text-zinc-400 whitespace-pre-wrap">
+              {JSON.stringify(selectedRow, null, 2)}
+            </pre>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-zinc-600">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold mb-2">pgpage</h2>
+              <p className="text-sm">
+                Select a table and row to view rendered markdown
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* TOC sidebar */}
+      {showToc && selectedRow && contentField && toc.length > 0 && (
+        <div className="w-56 flex-shrink-0 border-l border-zinc-800 bg-zinc-900 overflow-y-auto">
+          <div className="p-3 border-b border-zinc-800">
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">On this page</h3>
+          </div>
+          <nav className="p-3">
+            {toc.map((item, i) => (
+              <a
+                key={`${item.slug}-${i}`}
+                href={`#${item.slug}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById(item.slug)?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className={`block py-1 text-xs hover:text-zinc-200 transition-colors ${
+                  item.level === 1
+                    ? "text-zinc-300 font-medium"
+                    : item.level === 2
+                    ? "text-zinc-400 pl-3"
+                    : item.level === 3
+                    ? "text-zinc-500 pl-6"
+                    : "text-zinc-500 pl-9"
+                }`}
+              >
+                {item.text}
+              </a>
+            ))}
+          </nav>
+        </div>
+      )}
+    </div>
+  );
+}
