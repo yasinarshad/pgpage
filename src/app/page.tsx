@@ -11,7 +11,7 @@ type Tab = {
   schema: SchemaName;
   table: string;
   row: TableRow;
-  id: number;
+  id: string | number;
   title: string;
 };
 
@@ -57,19 +57,25 @@ function getTitle(row: TableRow): string {
   return `Row ${row.id}`;
 }
 
-function parseHash(): { schema?: SchemaName; table?: string; id?: number } {
+function parseHash(): { schema?: SchemaName; table?: string; id?: string | number } {
   if (typeof window === "undefined") return {};
   const hash = window.location.hash.slice(1); // remove #
   if (!hash) return {};
   const parts = hash.split("/");
+  const rawId = parts[2];
+  let id: string | number | undefined;
+  if (rawId) {
+    const asNum = parseInt(rawId, 10);
+    id = String(asNum) === rawId ? asNum : rawId; // keep as string if UUID
+  }
   return {
     schema: parts[0] as SchemaName | undefined,
     table: parts[1],
-    id: parts[2] ? parseInt(parts[2], 10) : undefined,
+    id,
   };
 }
 
-function setHash(schema: string, table?: string, id?: number) {
+function setHash(schema: string, table?: string, id?: string | number) {
   const parts = [schema];
   if (table) parts.push(table);
   if (id != null) parts.push(String(id));
@@ -91,7 +97,7 @@ export default function Home() {
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<number | null>(null);
+  const [activeTabId, setActiveTabId] = useState<string | number | null>(null);
 
   // Load tables for each schema
   useEffect(() => {
@@ -277,7 +283,7 @@ export default function Home() {
     setSelectedRow(row);
   };
 
-  const closeTab = (tabId: number, tabSchema: string, tabTable: string, e?: React.MouseEvent) => {
+  const closeTab = (tabId: string | number, tabSchema: string, tabTable: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const newTabs = openTabs.filter((t) => !(t.id === tabId && t.schema === tabSchema && t.table === tabTable));
     setOpenTabs(newTabs);
