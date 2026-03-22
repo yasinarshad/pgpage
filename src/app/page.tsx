@@ -1,244 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase, SCHEMAS, type SchemaName } from "@/lib/supabase";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { User } from "@supabase/supabase-js";
+import type { TableRow, Tab, FilterRule } from "@/lib/types";
+import {
+  extractToc, slugify, getContentField, getTitle,
+  parseHash, setHash, detectColType, applyFilter,
+} from "@/lib/helpers";
 
-type TableRow = Record<string, unknown>;
-
-type Tab = {
-  schema: SchemaName;
-  table: string;
-  row: TableRow;
-  id: string | number;
-  title: string;
-};
-
-type TocItem = { level: number; text: string; slug: string };
-
-function extractToc(markdown: string): TocItem[] {
-  const lines = markdown.split("\n");
-  const toc: TocItem[] = [];
-  let inCodeBlock = false;
-  for (const line of lines) {
-    if (line.startsWith("```")) { inCodeBlock = !inCodeBlock; continue; }
-    if (inCodeBlock) continue;
-    const match = line.match(/^(#{1,4})\s+(.+)/);
-    if (match) {
-      const level = match[1].length;
-      const text = match[2].replace(/[*`_~]/g, "");
-      const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-      toc.push({ level, text, slug });
-    }
-  }
-  return toc;
-}
-
-function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
-
-function getContentField(row: TableRow): string | null {
-  for (const key of ["content", "summary", "decision", "description", "question", "transcript"]) {
-    if (row[key] && typeof row[key] === "string" && (row[key] as string).length > 50) {
-      return key;
-    }
-  }
-  return null;
-}
-
-function getTitle(row: TableRow, fkMap?: Record<string, Record<string, string>>): string {
-  for (const key of ["title", "database_title", "name", "person_name", "category", "question", "subject"]) {
-    if (row[key] && typeof row[key] === "string" && (row[key] as string).length > 0) {
-      return row[key] as string;
-    }
-  }
-  const content = getContentField(row);
-  if (content && typeof row[content] === "string") {
-    return (row[content] as string).slice(0, 60) + "...";
-  }
-  // Try to build title from FK-resolved values
-  if (fkMap) {
-    for (const [col, lookup] of Object.entries(fkMap)) {
-      const val = String(row[col] || "");
-      if (lookup[val]) return lookup[val];
-    }
-  }
-  return `Row ${row.id}`;
-}
-
-function resolveValue(col: string, value: unknown, fkMap: Record<string, Record<string, string>>): string {
-  const s = String(value ?? "");
-  if (fkMap[col]?.[s]) return `${fkMap[col][s]}`;
-  return s;
-}
-
-function parseHash(): { schema?: SchemaName; table?: string; id?: string | number } {
-  if (typeof window === "undefined") return {};
-  const hash = window.location.hash.slice(1); // remove #
-  if (!hash) return {};
-  const parts = hash.split("/");
-  const rawId = parts[2];
-  let id: string | number | undefined;
-  if (rawId) {
-    const asNum = parseInt(rawId, 10);
-    id = String(asNum) === rawId ? asNum : rawId; // keep as string if UUID
-  }
-  return {
-    schema: parts[0] as SchemaName | undefined,
-    table: parts[1],
-    id,
-  };
-}
-
-function setHash(schema: string, table?: string, id?: string | number) {
-  const parts = [schema];
-  if (table) parts.push(table);
-  if (id != null) parts.push(String(id));
-  window.history.replaceState(null, "", `#${parts.join("/")}`);
-}
-
-type FilterRule = {
-  column: string;
-  operator: string;
-  value: string;
-};
-
-type ColType = "text" | "number" | "date" | "array" | "boolean" | "unknown";
-
-function detectColType(value: unknown): ColType {
-  if (value === null || value === undefined) return "unknown";
-  if (Array.isArray(value)) return "array";
-  if (typeof value === "boolean") return "boolean";
-  if (typeof value === "number") return "number";
-  if (typeof value === "string") {
-    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return "date";
-  }
-  return "text";
-}
-
-const OPERATORS: Record<ColType, { value: string; label: string }[]> = {
-  text: [
-    { value: "contains", label: "contains" },
-    { value: "equals", label: "equals" },
-    { value: "starts_with", label: "starts with" },
-    { value: "not_empty", label: "is not empty" },
-    { value: "is_empty", label: "is empty" },
-  ],
-  number: [
-    { value: "eq", label: "=" },
-    { value: "gt", label: ">" },
-    { value: "lt", label: "<" },
-    { value: "gte", label: ">=" },
-    { value: "lte", label: "<=" },
-  ],
-  date: [
-    { value: "after", label: "after" },
-    { value: "before", label: "before" },
-    { value: "equals", label: "equals" },
-  ],
-  array: [
-    { value: "contains", label: "contains" },
-    { value: "not_empty", label: "is not empty" },
-    { value: "is_empty", label: "is empty" },
-  ],
-  boolean: [
-    { value: "is_true", label: "is true" },
-    { value: "is_false", label: "is false" },
-  ],
-  unknown: [
-    { value: "not_empty", label: "is not empty" },
-    { value: "is_empty", label: "is empty" },
-  ],
-};
-
-function applyFilter(row: TableRow, filter: FilterRule): boolean {
-  const val = row[filter.column];
-  const filterVal = filter.value.toLowerCase();
-
-  switch (filter.operator) {
-    case "contains":
-      if (Array.isArray(val)) return val.some((v) => String(v).toLowerCase().includes(filterVal));
-      return String(val || "").toLowerCase().includes(filterVal);
-    case "equals":
-      return String(val || "").toLowerCase() === filterVal;
-    case "starts_with":
-      return String(val || "").toLowerCase().startsWith(filterVal);
-    case "not_empty":
-      return val != null && val !== "" && !(Array.isArray(val) && val.length === 0);
-    case "is_empty":
-      return val == null || val === "" || (Array.isArray(val) && val.length === 0);
-    case "eq":
-      return Number(val) === Number(filter.value);
-    case "gt":
-      return Number(val) > Number(filter.value);
-    case "lt":
-      return Number(val) < Number(filter.value);
-    case "gte":
-      return Number(val) >= Number(filter.value);
-    case "lte":
-      return Number(val) <= Number(filter.value);
-    case "after":
-      return new Date(String(val)) > new Date(filter.value);
-    case "before":
-      return new Date(String(val)) < new Date(filter.value);
-    case "is_true":
-      return val === true;
-    case "is_false":
-      return val === false;
-    default:
-      return true;
-  }
-}
-
-function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-    } else if (data.user) {
-      onLogin(data.user);
-    }
-  };
-
-  return (
-    <div className="flex items-center justify-center h-screen bg-zinc-950">
-      <form onSubmit={handleSubmit} className="w-80 p-6 bg-zinc-900 rounded-lg border border-zinc-800">
-        <h1 className="text-xl font-bold text-zinc-100 mb-1">pgpage</h1>
-        <p className="text-xs text-zinc-500 mb-6">Postgres Markdown Viewer</p>
-        {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
-        <input
-          type="email" placeholder="Email" value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full bg-zinc-800 text-zinc-200 text-sm rounded px-3 py-2 border border-zinc-700 outline-none mb-3 placeholder-zinc-500"
-          autoFocus
-        />
-        <input
-          type="password" placeholder="Password" value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full bg-zinc-800 text-zinc-200 text-sm rounded px-3 py-2 border border-zinc-700 outline-none mb-4 placeholder-zinc-500"
-        />
-        <button
-          type="submit" disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm rounded px-3 py-2 disabled:opacity-50"
-        >
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-      </form>
-    </div>
-  );
-}
+import { LoginScreen } from "@/components/LoginScreen";
+import { Sidebar } from "@/components/Sidebar";
+import { RowList } from "@/components/RowList";
+import { ContentViewer } from "@/components/ContentViewer";
+import { TOCSidebar } from "@/components/TOCSidebar";
+import { TabBar } from "@/components/TabBar";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -263,6 +40,15 @@ export default function Home() {
   const [fkLookups, setFkLookups] = useState<Record<string, Record<string, string>>>({});
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | number | null>(null);
+  // Pagination state
+  const [rowOffset, setRowOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Empty state stats
+  const [dbStats, setDbStats] = useState<{ schemas: number; tables: number; rows: number } | null>(null);
+  // Keyboard navigation
+  const [selectedRowIndex, setSelectedRowIndex] = useState(-1);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Check existing auth session
   useEffect(() => {
@@ -276,19 +62,44 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load tables for each schema
+  // Load tables for each schema + compute stats for empty state
   useEffect(() => {
     async function loadTables() {
       const result: Record<string, string[]> = {};
+      let totalTables = 0;
+      let schemaCount = 0;
       for (const schema of SCHEMAS) {
         const { data } = await supabase.rpc("pg_tables_list", {
           p_schema: schema.name,
         });
         if (data) {
-          result[schema.name] = data;
+          const filtered = (data as string[]).filter(
+            (t: string) => !t.startsWith("directus_") && t !== "schema_changes"
+          );
+          result[schema.name] = data as string[];
+          totalTables += filtered.length;
+          if (filtered.length > 0) schemaCount++;
         }
       }
       setTables(result);
+
+      // Compute row count stats in background (don't block table loading)
+      setDbStats({ schemas: schemaCount, tables: totalTables, rows: 0 });
+      let rowCount = 0;
+      for (const schema of SCHEMAS) {
+        const filtered = (result[schema.name] || []).filter(
+          (t: string) => !t.startsWith("directus_") && t !== "schema_changes"
+        );
+        for (const table of filtered) {
+          const { data: rowData } = await supabase.rpc("pg_query_table", {
+            p_schema: schema.name,
+            p_table: table,
+            row_limit: 500,
+          });
+          if (rowData && Array.isArray(rowData)) rowCount += rowData.length;
+        }
+      }
+      setDbStats({ schemas: schemaCount, tables: totalTables, rows: rowCount });
 
       // Restore state from URL hash after tables are loaded
       const { schema, table, id } = parseHash();
@@ -296,7 +107,6 @@ export default function Home() {
         setSelectedSchema(schema);
         if (table) {
           setSelectedTable(table);
-          // Load rows AND select the specific row if ID is in URL
           if (id) {
             const { data } = await supabase.rpc("pg_query_table", {
               p_schema: schema,
@@ -305,10 +115,11 @@ export default function Home() {
             });
             if (data) {
               setRows(data as TableRow[]);
+              setHasMore((data as TableRow[]).length === 100);
+              setRowOffset(100);
               const match = (data as TableRow[]).find((r) => String(r.id) === String(id));
               if (match) {
                 setSelectedRow(match);
-                // Also open as a tab
                 const tabId = match.id as string | number;
                 setOpenTabs([{ schema, table, row: match, id: tabId, title: getTitle(match, fkLookups) }]);
                 setActiveTabId(tabId);
@@ -320,9 +131,9 @@ export default function Home() {
       setInitialized(true);
     }
     loadTables();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for hash changes (manual URL edits, direct navigation, back/forward)
+  // Listen for hash changes
   useEffect(() => {
     function handleHashChange() {
       const { schema, table, id } = parseHash();
@@ -330,7 +141,6 @@ export default function Home() {
         setSelectedSchema(schema);
         if (table) {
           setSelectedTable(table);
-          // Load rows and select the specific row
           if (id) {
             supabase.rpc("pg_query_table", {
               p_schema: schema,
@@ -339,6 +149,8 @@ export default function Home() {
             }).then(({ data }) => {
               if (data) {
                 setRows(data as TableRow[]);
+                setHasMore((data as TableRow[]).length === 100);
+                setRowOffset(100);
                 const match = (data as TableRow[]).find((r) => r.id === id);
                 if (match) setSelectedRow(match);
               }
@@ -354,6 +166,7 @@ export default function Home() {
   // Load rows when table is selected
   const loadRows = useCallback(async (schema: SchemaName, table: string) => {
     setLoading(true);
+    setRowOffset(0);
     const { data, error } = await supabase.rpc("pg_query_table", {
       p_schema: schema,
       p_table: table,
@@ -361,7 +174,8 @@ export default function Home() {
     });
     if (!error && data) {
       setRows(data as TableRow[]);
-      // Restore selected row from hash
+      setHasMore((data as TableRow[]).length === 100);
+      setRowOffset(100);
       const { id } = parseHash();
       if (id) {
         const match = (data as TableRow[]).find((r) => r.id === id);
@@ -371,6 +185,35 @@ export default function Home() {
     setLoading(false);
   }, []);
 
+  // Load more rows (pagination)
+  const handleLoadMore = useCallback(async () => {
+    if (!selectedTable || loadingMore) return;
+    setLoadingMore(true);
+    const { data, error } = await supabase.rpc("pg_query_table", {
+      p_schema: selectedSchema,
+      p_table: selectedTable,
+      row_limit: 100,
+      row_offset: rowOffset,
+    });
+    if (!error && data) {
+      const newRows = data as TableRow[];
+      // Deduplicate: only add rows we don't already have
+      setRows((prev) => {
+        const existingIds = new Set(prev.map((r) => String(r.id)));
+        const unique = newRows.filter((r) => !existingIds.has(String(r.id)));
+        if (unique.length === 0) {
+          // No new rows — RPC may not support offset
+          setHasMore(false);
+          return prev;
+        }
+        setHasMore(newRows.length === 100);
+        return [...prev, ...unique];
+      });
+      setRowOffset((prev) => prev + newRows.length);
+    }
+    setLoadingMore(false);
+  }, [selectedSchema, selectedTable, rowOffset, loadingMore]);
+
   useEffect(() => {
     if (!selectedTable) return;
     setSelectedRow(null);
@@ -379,8 +222,8 @@ export default function Home() {
     setFilters([]);
     setFilterTag(null);
     setFkLookups({});
+    setSelectedRowIndex(-1);
     loadRows(selectedSchema, selectedTable);
-    // Load FK lookups for this table
     supabase.rpc("pg_resolve_fks", { p_schema: selectedSchema, p_table: selectedTable })
       .then(({ data }) => { if (data) setFkLookups(data as Record<string, Record<string, string>>); });
   }, [selectedSchema, selectedTable, loadRows]);
@@ -401,12 +244,13 @@ export default function Home() {
       });
       if (data) {
         setRows(data as TableRow[]);
-        setSearchQuery(searchInput); // also apply client-side for highlighting
+        setSearchQuery(searchInput);
+        setHasMore(false); // search results don't paginate
       }
       setIsServerSearching(false);
-    }, 400); // 400ms debounce
+    }, 400);
     return () => clearTimeout(timer);
-  }, [searchInput, selectedSchema, selectedTable]);
+  }, [searchInput, selectedSchema, selectedTable]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reload original rows when search is cleared
   useEffect(() => {
@@ -425,6 +269,60 @@ export default function Home() {
     );
   }, [selectedSchema, selectedTable, selectedRow, initialized]);
 
+  // Keyboard shortcuts: Cmd+K, Escape, Up/Down arrows
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Cmd+K or Ctrl+K: focus search
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      // Escape: deselect row / blur search
+      if (e.key === "Escape") {
+        if (document.activeElement === searchInputRef.current) {
+          searchInputRef.current?.blur();
+          setSearchInput("");
+        } else if (selectedRow) {
+          setSelectedRow(null);
+          setSelectedRowIndex(-1);
+        }
+        return;
+      }
+
+      // Up/Down arrows: navigate row list (only when not in an input/textarea)
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedRowIndex((prev) => {
+          const max = sortedRows.length - 1;
+          if (max < 0) return -1;
+          let next: number;
+          if (e.key === "ArrowDown") {
+            next = prev < max ? prev + 1 : max;
+          } else {
+            next = prev > 0 ? prev - 1 : 0;
+          }
+          // Select the row
+          const row = sortedRows[next];
+          if (row) setSelectedRow(row);
+          return next;
+        });
+      }
+
+      // Enter: open selected row as tab
+      if (e.key === "Enter" && selectedRowIndex >= 0) {
+        const row = sortedRows[selectedRowIndex];
+        if (row) openTab(row);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }); // Re-bind on every render so closures have fresh state
+
   // Collect all unique tags from current rows
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -440,20 +338,19 @@ export default function Home() {
   const columns = useMemo(() => {
     if (rows.length === 0) return [];
     const firstRow = rows[0];
-    const skip = ["embedding", "search_vector"]; // hide noise columns
+    const skip = ["embedding", "search_vector"];
     return Object.keys(firstRow)
       .filter((k) => !skip.includes(k))
       .map((k) => ({ name: k, type: detectColType(firstRow[k]) }));
   }, [rows]);
 
-  // Collect unique values per column (for select-style filters)
+  // Collect unique values per column
   const columnValues = useMemo(() => {
     const result: Record<string, string[]> = {};
     const longTextCols = new Set<string>();
     for (const row of rows) {
       for (const [k, v] of Object.entries(row)) {
         if (v == null || k === "embedding" || k === "search_vector") continue;
-        // Skip columns with long text values (content, transcript, etc.)
         if (typeof v === "string" && v.length > 200) { longTextCols.add(k); continue; }
         if (!result[k]) result[k] = [];
         if (Array.isArray(v)) {
@@ -467,7 +364,6 @@ export default function Home() {
         }
       }
     }
-    // Remove long text columns and columns with too many unique values (>200 = not useful as select)
     for (const k of longTextCols) delete result[k];
     for (const k of Object.keys(result)) {
       if (result[k].length > 200) delete result[k];
@@ -478,11 +374,9 @@ export default function Home() {
 
   // Filter then sort
   const filteredRows = rows.filter((row) => {
-    // Tag filter
     if (filterTag && !(Array.isArray(row.tags) && (row.tags as string[]).includes(filterTag))) {
       return false;
     }
-    // Search filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const id = String(row.id || "");
@@ -492,7 +386,6 @@ export default function Home() {
       const tags = Array.isArray(row.tags) ? (row.tags as string[]).join(" ").toLowerCase() : "";
       if (!title.includes(q) && !content.includes(q) && !tags.includes(q)) return false;
     }
-    // Advanced filters
     for (const f of filters) {
       if (f.column && f.operator && !applyFilter(row, f)) return false;
     }
@@ -591,7 +484,18 @@ export default function Home() {
     || openTabs.find((t) => t.id === activeTabId);
 
   if (authLoading) {
-    return <div className="flex items-center justify-center h-screen bg-zinc-950 text-zinc-500">Loading...</div>;
+    // Loading skeleton for auth check
+    return (
+      <div className="flex items-center justify-center h-screen bg-zinc-950">
+        <div className="w-80 p-6 space-y-4">
+          <div className="h-6 w-24 bg-zinc-800 rounded animate-pulse" />
+          <div className="h-3 w-40 bg-zinc-800/60 rounded animate-pulse" />
+          <div className="h-10 bg-zinc-800 rounded animate-pulse" />
+          <div className="h-10 bg-zinc-800 rounded animate-pulse" />
+          <div className="h-10 bg-zinc-700 rounded animate-pulse" />
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
@@ -627,422 +531,83 @@ export default function Home() {
 
       {/* Sidebar */}
       {showSidebar && (
-      <div className="w-56 flex-shrink-0 border-r border-zinc-800 bg-zinc-900 overflow-y-auto flex flex-col">
-        <div className="p-4 border-b border-zinc-800">
-          <h1 className="text-lg font-bold text-zinc-100">pgpage</h1>
-          <p className="text-xs text-zinc-500 mt-1">Postgres Markdown Viewer</p>
-        </div>
-
-        {/* Schema tabs */}
-        <div className="flex flex-wrap gap-1 p-2 border-b border-zinc-800">
-          {SCHEMAS.map((s) => (
-            <button
-              key={s.name}
-              onClick={() => {
-                setSelectedSchema(s.name);
-                setSelectedTable(null);
-                setSelectedRow(null);
-                setRows([]);
-              }}
-              className={`px-2 py-1 rounded text-xs ${
-                selectedSchema === s.name
-                  ? "bg-zinc-700 text-zinc-100"
-                  : "text-zinc-400 hover:bg-zinc-800"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tables list */}
-        <div className="p-2 flex-1">
-          {(tables[selectedSchema] || [])
-            .filter((t) => !t.startsWith("directus_") && t !== "schema_changes")
-            .map((table) => (
-              <button
-                key={table}
-                onClick={() => setSelectedTable(table)}
-                className={`w-full text-left px-3 py-1.5 rounded text-sm ${
-                  selectedTable === table
-                    ? "bg-zinc-700 text-zinc-100"
-                    : "text-zinc-400 hover:bg-zinc-800"
-                }`}
-              >
-                {table}
-              </button>
-            ))}
-        </div>
-        {/* Logout */}
-        <div className="p-3 border-t border-zinc-800">
-          <button
-            onClick={() => { supabase.auth.signOut(); setUser(null); }}
-            className="w-full text-left text-xs text-zinc-600 hover:text-zinc-400 px-2 py-1"
-          >
-            Sign out ({user?.email?.split("@")[0]})
-          </button>
-        </div>
-      </div>
+        <Sidebar
+          user={user}
+          setUser={setUser}
+          tables={tables}
+          selectedSchema={selectedSchema}
+          setSelectedSchema={setSelectedSchema}
+          selectedTable={selectedTable}
+          setSelectedTable={setSelectedTable}
+          setSelectedRow={setSelectedRow}
+          setRows={setRows}
+        />
       )}
 
       {/* Row list */}
       {showRowList && selectedTable && (
-        <div className="w-72 flex-shrink-0 border-r border-zinc-800 bg-zinc-925 overflow-y-auto">
-          <div className="p-3 border-b border-zinc-800">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h2 className="text-sm font-semibold text-zinc-300">{selectedTable}</h2>
-                <p className="text-xs text-zinc-500">
-                  {sortedRows.length}{filteredRows.length !== rows.length ? ` / ${rows.length}` : ""} entries
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleRefresh}
-                  className="text-zinc-500 hover:text-zinc-300 text-sm"
-                  title="Refresh"
-                >
-                  ↻
-                </button>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as "newest" | "oldest" | "modified" | "title")}
-                  className="bg-zinc-800 text-zinc-400 text-xs rounded px-2 py-1 border border-zinc-700 outline-none"
-                >
-                  <option value="newest">Newest</option>
-                  <option value="oldest">Oldest</option>
-                  <option value="modified">Last Modified</option>
-                  <option value="title">A-Z</option>
-                </select>
-              </div>
-            </div>
-            {/* Search */}
-            <input
-              type="text"
-              placeholder={isServerSearching ? "Searching all rows..." : "Search (all rows)..."}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className={`w-full bg-zinc-800 text-zinc-200 text-xs rounded px-2 py-1.5 border outline-none placeholder-zinc-500 mb-2 ${isServerSearching ? "border-blue-500" : "border-zinc-700"}`}
-            />
-            {/* Tag filter */}
-            {allTags.length > 0 && (
-              <div>
-                {filterTag ? (
-                  <button
-                    onClick={() => setFilterTag(null)}
-                    className="px-2 py-0.5 rounded text-xs bg-blue-600 text-white"
-                  >
-                    {filterTag} ✕
-                  </button>
-                ) : (
-                  <select
-                    value=""
-                    onChange={(e) => { if (e.target.value) setFilterTag(e.target.value); }}
-                    className="w-full bg-zinc-800 text-zinc-400 text-xs rounded px-2 py-1.5 border border-zinc-700 outline-none"
-                  >
-                    <option value="">Filter by tag ({allTags.length})</option>
-                    {allTags.map((tag) => (
-                      <option key={tag} value={tag}>{tag}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
-            {/* Advanced filter toggle */}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`w-full text-left text-xs px-2 py-1 mt-1 rounded ${
-                filters.length > 0 ? "text-blue-400" : "text-zinc-600"
-              } hover:bg-zinc-800`}
-            >
-              {showFilters ? "▾" : "▸"} Filters{filters.length > 0 ? ` (${filters.length})` : ""}
-            </button>
-            {showFilters && (
-              <div className="mt-1 space-y-1 px-1">
-                {filters.map((f, i) => (
-                  <div key={i} className="flex gap-1 items-center">
-                    <select
-                      value={f.column}
-                      onChange={(e) => {
-                        const newFilters = [...filters];
-                        const col = columns.find((c) => c.name === e.target.value);
-                        newFilters[i] = { column: e.target.value, operator: col ? OPERATORS[col.type][0].value : "contains", value: "" };
-                        setFilters(newFilters);
-                      }}
-                      className="bg-zinc-800 text-zinc-400 text-[10px] rounded px-1 py-0.5 border border-zinc-700 outline-none flex-1 min-w-0"
-                    >
-                      <option value="">col</option>
-                      {columns.map((c) => (
-                        <option key={c.name} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={f.operator}
-                      onChange={(e) => {
-                        const newFilters = [...filters];
-                        newFilters[i] = { ...f, operator: e.target.value };
-                        setFilters(newFilters);
-                      }}
-                      className="bg-zinc-800 text-zinc-400 text-[10px] rounded px-1 py-0.5 border border-zinc-700 outline-none"
-                    >
-                      {(columns.find((c) => c.name === f.column)?.type
-                        ? OPERATORS[columns.find((c) => c.name === f.column)!.type]
-                        : OPERATORS.text
-                      ).map((op) => (
-                        <option key={op.value} value={op.value}>{op.label}</option>
-                      ))}
-                    </select>
-                    {!["not_empty", "is_empty", "is_true", "is_false"].includes(f.operator) && (
-                      columnValues[f.column] && columnValues[f.column].length <= 200 ? (
-                        <select
-                          value={f.value}
-                          onChange={(e) => {
-                            const newFilters = [...filters];
-                            newFilters[i] = { ...f, value: e.target.value };
-                            setFilters(newFilters);
-                          }}
-                          className="bg-zinc-800 text-zinc-300 text-[10px] rounded px-1 py-0.5 border border-zinc-700 outline-none flex-1 min-w-0"
-                        >
-                          <option value="">select...</option>
-                          {columnValues[f.column].map((v) => {
-                            const label = fkLookups[f.column]?.[v] || v;
-                            return <option key={v} value={v}>{label.length > 50 ? label.slice(0, 50) + "..." : label}</option>;
-                          })}
-                        </select>
-                      ) : (
-                        <input
-                          type={columns.find((c) => c.name === f.column)?.type === "date" ? "date" : "text"}
-                          value={f.value}
-                          onChange={(e) => {
-                            const newFilters = [...filters];
-                            newFilters[i] = { ...f, value: e.target.value };
-                            setFilters(newFilters);
-                          }}
-                          placeholder="value"
-                          className="bg-zinc-800 text-zinc-300 text-[10px] rounded px-1 py-0.5 border border-zinc-700 outline-none flex-1 min-w-0 placeholder-zinc-600"
-                        />
-                      )
-                    )}
-                    <button
-                      onClick={() => setFilters(filters.filter((_, idx) => idx !== i))}
-                      className="text-zinc-600 hover:text-zinc-300 text-[10px]"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setFilters([...filters, { column: "", operator: "contains", value: "" }])}
-                    className="text-[10px] text-zinc-600 hover:text-zinc-400"
-                  >
-                    + Add filter
-                  </button>
-                  {filters.length > 0 && (
-                    <button
-                      onClick={() => setFilters([])}
-                      className="text-[10px] text-zinc-600 hover:text-zinc-400"
-                    >
-                      Clear all
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          {loading ? (
-            <div className="p-4 text-zinc-500 text-sm">Loading...</div>
-          ) : (
-            sortedRows.map((row) => (
-              <button
-                key={row.id as number}
-                onClick={(e) => {
-                  if (e.metaKey || e.ctrlKey) {
-                    openTab(row);
-                  } else {
-                    setSelectedRow(row);
-                  }
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  const path = `${selectedSchema}.${selectedTable}.id=${row.id}`;
-                  navigator.clipboard.writeText(path);
-                  const el = e.currentTarget;
-                  el.style.outline = "1px solid #60a5fa";
-                  setTimeout(() => { el.style.outline = ""; }, 500);
-                }}
-                title={`Right-click to copy: ${selectedSchema}.${selectedTable}.id=${row.id}`}
-                className={`w-full text-left px-3 py-2 border-b border-zinc-800/50 ${
-                  selectedRow?.id === row.id
-                    ? "bg-zinc-800"
-                    : "hover:bg-zinc-800/50"
-                }`}
-              >
-                <div className="text-sm text-zinc-200 truncate">
-                  {getTitle(row, fkLookups)}
-                </div>
-                <div className="text-xs text-zinc-500 mt-0.5">
-                  {(row.date_published || row.created_at)
-                    ? new Date(String(row.date_published || row.created_at)).toLocaleDateString()
-                    : `#${row.id}`}
-                </div>
-              </button>
-            ))
-          )}
-        </div>
+        <RowList
+          selectedSchema={selectedSchema}
+          selectedTable={selectedTable}
+          rows={rows}
+          sortedRows={sortedRows}
+          filteredRowsCount={filteredRows.length}
+          selectedRow={selectedRow}
+          setSelectedRow={setSelectedRow}
+          openTab={openTab}
+          loading={loading}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+          searchInput={searchInput}
+          setSearchInput={setSearchInput}
+          isServerSearching={isServerSearching}
+          filterTag={filterTag}
+          setFilterTag={setFilterTag}
+          allTags={allTags}
+          filters={filters}
+          setFilters={setFilters}
+          showFilters={showFilters}
+          setShowFilters={setShowFilters}
+          columns={columns}
+          columnValues={columnValues}
+          fkLookups={fkLookups}
+          handleRefresh={handleRefresh}
+          searchInputRef={searchInputRef}
+          selectedRowIndex={selectedRowIndex}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={handleLoadMore}
+        />
       )}
 
       {/* Content area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Tab bar */}
-        {openTabs.length > 0 && (
-          <div className="flex-shrink-0 flex items-center border-b border-zinc-800 bg-zinc-900 overflow-x-auto">
-            {openTabs.map((tab) => {
-              const isActive = tab.id === activeTabId;
-              return (
-                <button
-                  key={`${tab.schema}-${tab.table}-${tab.id}`}
-                  onClick={() => switchTab(tab)}
-                  className={`group flex items-center gap-1.5 px-3 py-1.5 text-xs border-r border-zinc-800 whitespace-nowrap ${
-                    isActive
-                      ? "bg-zinc-950 text-zinc-100 border-b-2 border-b-blue-500"
-                      : "bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-                  }`}
-                >
-                  <span className="max-w-[160px] truncate">{tab.title}</span>
-                  <span className="text-[10px] text-zinc-600">{tab.table}</span>
-                  <span
-                    onClick={(e) => closeTab(tab.id, tab.schema, tab.table, e)}
-                    className="ml-1 text-zinc-600 hover:text-zinc-200 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    ×
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <TabBar
+          openTabs={openTabs}
+          activeTabId={activeTabId}
+          switchTab={switchTab}
+          closeTab={closeTab}
+        />
 
         <div className="flex-1 overflow-y-auto">
-        {selectedRow && contentField ? (
-          <div className="max-w-4xl mx-auto px-8 py-6">
-            {/* Properties bar */}
-            <div className="mb-6 pb-4 border-b border-zinc-800">
-              {Boolean(selectedRow.title) && (
-                <h1 className="text-2xl font-bold text-zinc-100 mb-3">
-                  {String(selectedRow.title)}
-                </h1>
-              )}
-              <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
-                {selectedRow.id != null && (
-                  <span
-                    className="cursor-pointer hover:text-zinc-300"
-                    onClick={() => {
-                      const url = `${window.location.origin}${window.location.pathname}#${selectedSchema}/${selectedTable}/${selectedRow.id}`;
-                      navigator.clipboard.writeText(url);
-                    }}
-                    title="Click to copy URL"
-                  >
-                    {selectedSchema}/{selectedTable}/{String(selectedRow.id)}
-                  </span>
-                )}
-                {Boolean(selectedRow.date_published) && (
-                  <span>
-                    Published:{" "}
-                    {new Date(String(selectedRow.date_published)).toLocaleDateString()}
-                  </span>
-                )}
-                {Boolean(selectedRow.created_at) && (
-                  <span>
-                    Added:{" "}
-                    {new Date(String(selectedRow.created_at)).toLocaleString()}
-                  </span>
-                )}
-                {Boolean(selectedRow.platform) && (
-                  <span>Platform: {String(selectedRow.platform)}</span>
-                )}
-                {Boolean(selectedRow.topic) && (
-                  <span>Topic: {String(selectedRow.topic)}</span>
-                )}
-                {Object.entries(fkLookups).map(([col, lookup]) => {
-                  const val = String(selectedRow[col] ?? "");
-                  if (!lookup[val]) return null;
-                  return <span key={col}>{col.replace(/_id$/, "")}: {lookup[val]}</span>;
-                })}
-              </div>
-              {Array.isArray(selectedRow.tags) && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {(selectedRow.tags as string[]).map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded text-xs"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Rendered markdown */}
-            <div className="pgpage-prose">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={headingComponents}>
-                {contentStr}
-              </ReactMarkdown>
-            </div>
-          </div>
-        ) : selectedRow ? (
-          <div className="max-w-4xl mx-auto px-8 py-6">
-            <h2 className="text-lg font-semibold mb-4">
-              {getTitle(selectedRow, fkLookups)}
-            </h2>
-            <pre className="text-sm text-zinc-400 whitespace-pre-wrap">
-              {JSON.stringify(selectedRow, null, 2)}
-            </pre>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-zinc-600">
-            <div className="text-center">
-              <h2 className="text-xl font-semibold mb-2">pgpage</h2>
-              <p className="text-sm">
-                Select a table and row to view rendered markdown
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+          {selectedRow ? (
+            <ContentViewer
+              selectedRow={selectedRow}
+              selectedSchema={selectedSchema}
+              selectedTable={selectedTable || ""}
+              fkLookups={fkLookups}
+              headingComponents={headingComponents}
+            />
+          ) : (
+            <EmptyState stats={dbStats} />
+          )}
+        </div>
       </div>
 
       {/* TOC sidebar */}
       {showToc && selectedRow && contentField && toc.length > 0 && (
-        <div className="w-56 flex-shrink-0 border-l border-zinc-800 bg-zinc-900 overflow-y-auto">
-          <div className="p-3 border-b border-zinc-800">
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">On this page</h3>
-          </div>
-          <nav className="p-3">
-            {toc.map((item, i) => (
-              <a
-                key={`${item.slug}-${i}`}
-                href={`#${item.slug}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById(item.slug)?.scrollIntoView({ behavior: "smooth" });
-                }}
-                className={`block py-1 text-xs hover:text-zinc-200 transition-colors ${
-                  item.level === 1
-                    ? "text-zinc-300 font-medium"
-                    : item.level === 2
-                    ? "text-zinc-400 pl-3"
-                    : item.level === 3
-                    ? "text-zinc-500 pl-6"
-                    : "text-zinc-500 pl-9"
-                }`}
-              >
-                {item.text}
-              </a>
-            ))}
-          </nav>
-        </div>
+        <TOCSidebar toc={toc} />
       )}
     </div>
   );
