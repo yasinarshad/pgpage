@@ -25,10 +25,15 @@ export function slugify(text: string): string {
 }
 
 export function getContentField(row: TableRow): string | null {
+  // Check for actual content fields first (from full row fetches)
   for (const key of ["content", "summary", "decision", "description", "question", "transcript"]) {
-    if (row[key] && typeof row[key] === "string" && (row[key] as string).length > 50) {
+    if (row[key] && typeof row[key] === "string" && (row[key] as string).length > 30) {
       return key;
     }
+  }
+  // Fallback for master feed preview
+  if (row.preview && typeof row.preview === "string" && (row.preview as string).length > 10) {
+    return "preview";
   }
   return null;
 }
