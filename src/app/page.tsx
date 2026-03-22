@@ -95,6 +95,8 @@ export default function Home() {
             const tabId = match.id as string | number;
             setOpenTabs([{ schema, table, row: match, id: tabId, title: getTitle(match) }]);
             setActiveTabId(tabId);
+            // On mobile, jump straight to content view for direct links
+            if (!isDesktop) pushTo("content");
           }
         }
       });
