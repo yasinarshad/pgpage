@@ -14,14 +14,16 @@ type SidebarProps = {
   setSelectedTable: (t: string | null) => void;
   setSelectedRow: (r: TableRow | null) => void;
   setRows: (r: TableRow[]) => void;
+  isMobileFullScreen?: boolean;
 };
 
 export function Sidebar({
   user, setUser, tables, selectedSchema, setSelectedSchema,
   selectedTable, setSelectedTable, setSelectedRow, setRows,
+  isMobileFullScreen,
 }: SidebarProps) {
   return (
-    <div className="w-56 flex-shrink-0 border-r border-zinc-800 bg-zinc-900 overflow-y-auto flex flex-col">
+    <div className={`${isMobileFullScreen ? "w-full flex-1" : "w-56 flex-shrink-0"} border-r border-zinc-800 bg-zinc-900 overflow-y-auto flex flex-col`}>
       <div className="p-4 border-b border-zinc-800">
         <h1 className="text-lg font-bold text-zinc-100">pgpage</h1>
         <p className="text-xs text-zinc-500 mt-1">Postgres Markdown Viewer</p>

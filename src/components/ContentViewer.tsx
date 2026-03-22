@@ -15,10 +15,11 @@ type ContentViewerProps = {
   fkLookups: Record<string, Record<string, string>>;
   headingComponents: Record<string, React.ComponentType<React.HTMLAttributes<HTMLHeadingElement>>>;
   onFilterClick?: (column: string, value: string) => void;
+  isMobile?: boolean;
 };
 
 export function ContentViewer({
-  selectedRow, selectedSchema, selectedTable, fkLookups, headingComponents, onFilterClick,
+  selectedRow, selectedSchema, selectedTable, fkLookups, headingComponents, onFilterClick, isMobile,
 }: ContentViewerProps) {
   const contentField = getContentField(selectedRow);
   const contentStr = contentField ? String(selectedRow[contentField]) : "";
@@ -27,9 +28,13 @@ export function ContentViewer({
 
   const clickable = "cursor-pointer hover:text-zinc-200 transition-colors";
 
+  const containerClass = isMobile
+    ? "px-4 py-4"
+    : "max-w-4xl mx-auto px-8 py-6";
+
   if (!contentField) {
     return (
-      <div className="max-w-4xl mx-auto px-8 py-6">
+      <div className={containerClass}>
         <h2 className="text-lg font-semibold mb-4">
           {getTitle(selectedRow, fkLookups)}
         </h2>
@@ -41,7 +46,7 @@ export function ContentViewer({
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-8 py-6">
+    <div className={containerClass}>
       {/* Breadcrumb bar */}
       <div className="mb-2">
         <div className="text-xs text-zinc-500 flex items-center gap-1">
@@ -90,6 +95,15 @@ export function ContentViewer({
               {new Date(String(selectedRow.created_at)).toLocaleString()}
             </span>
           )}
+          {Boolean(selectedRow.session_id) && String(selectedRow.session_id) !== "00000000-0000-0000-0000-000000000000" && (
+            <span
+              className={onFilterClick ? clickable : ""}
+              onClick={() => onFilterClick?.("session_id", String(selectedRow.session_id))}
+              title={onFilterClick ? "Click to see all entries from this session" : undefined}
+            >
+              Session: {String(selectedRow.session_id).slice(0, 8)}...
+            </span>
+          )}
           {Boolean(selectedRow.platform) && (
             <span
               className={onFilterClick ? clickable : ""}
@@ -124,11 +138,11 @@ export function ContentViewer({
           })}
         </div>
         {Array.isArray(selectedRow.tags) && (
-          <div className="flex flex-wrap gap-1 mt-2">
+          <div className={`flex flex-wrap ${isMobile ? "gap-2" : "gap-1"} mt-2`}>
             {(selectedRow.tags as string[]).map((tag) => (
               <span
                 key={tag}
-                className={`px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded text-xs ${onFilterClick ? "cursor-pointer hover:bg-zinc-700 hover:text-zinc-200 transition-colors" : ""}`}
+                className={`${isMobile ? "px-3 py-1.5 text-sm" : "px-2 py-0.5 text-xs"} bg-zinc-800 text-zinc-400 rounded ${onFilterClick ? "cursor-pointer hover:bg-zinc-700 hover:text-zinc-200 transition-colors" : ""}`}
                 onClick={() => onFilterClick?.("tags", tag)}
                 title={onFilterClick ? `Click to filter by "${tag}"` : undefined}
               >

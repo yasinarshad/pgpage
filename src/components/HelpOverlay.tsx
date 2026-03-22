@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 
-export function HelpButton() {
+export function HelpButton({ id }: { id?: string }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <button
+        id={id}
         onClick={() => setOpen(true)}
         className="w-7 h-7 rounded flex items-center justify-center text-xs text-zinc-500 hover:bg-zinc-800"
         title="Help & shortcuts"

@@ -117,3 +117,13 @@ body {
   background: transparent;
   padding: 0;
 }
+
+/* Safe area padding for bottom nav on notched iPhones */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Zinc-925 custom color (between 900 and 950) */
+.bg-zinc-925 {
+  background-color: #101014;
+}

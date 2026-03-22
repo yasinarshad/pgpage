@@ -8,6 +8,7 @@ import {
   extractToc, slugify, getContentField, getTitle,
   parseHash, setHash, detectColType, applyFilter,
 } from "@/lib/helpers";
+import { useMobileView } from "@/lib/useMobile";
 
 import { LoginScreen } from "@/components/LoginScreen";
 import { Sidebar } from "@/components/Sidebar";
@@ -17,6 +18,8 @@ import { TOCSidebar } from "@/components/TOCSidebar";
 import { TabBar } from "@/components/TabBar";
 import { EmptyState } from "@/components/EmptyState";
 import { HelpButton } from "@/components/HelpOverlay";
+import { BottomNav } from "@/components/BottomNav";
+import { MobileBackHeader } from "@/components/MobileBackHeader";
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -50,6 +53,11 @@ export default function Home() {
   // Keyboard navigation
   const [selectedRowIndex, setSelectedRowIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Mobile state
+  const { mobileView, pushTo, goBack, isPhone, isTablet, isDesktop } = useMobileView();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobileTocOpen, setMobileTocOpen] = useState(false);
 
   // Check existing auth session
   useEffect(() => {
@@ -446,6 +454,10 @@ export default function Home() {
       setActiveTabId(id);
     }
     setSelectedRow(row);
+    // On mobile, push to content view
+    if (!isDesktop) {
+      pushTo("content");
+    }
   };
 
   const closeTab = (tabId: string | number, tabSchema: string, tabTable: string, e?: React.MouseEvent) => {
@@ -471,8 +483,26 @@ export default function Home() {
     setSelectedTable(tab.table);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const activeTab = openTabs.find((t) => t.id === activeTabId && t.schema === selectedSchema && t.table === selectedTable)
     || openTabs.find((t) => t.id === activeTabId);
+
+  // Mobile: select table from sidebar -> push to list
+  const handleSelectTableMobile = (table: string | null) => {
+    setSelectedTable(table);
+    if (!isDesktop) {
+      setMobileSidebarOpen(false);
+      pushTo("list");
+    }
+  };
+
+  // Mobile: select row -> push to content
+  const handleSelectRowMobile = (row: TableRow) => {
+    setSelectedRow(row);
+    if (!isDesktop) {
+      pushTo("content");
+    }
+  };
 
   if (authLoading) {
     // Loading skeleton for auth check
@@ -493,6 +523,398 @@ export default function Home() {
     return <LoginScreen onLogin={setUser} />;
   }
 
+  // ----- Mobile phone layout: single panel at a time -----
+  if (isPhone) {
+    return (
+      <div className="flex flex-col h-[100dvh]">
+        {/* Mobile sidebar drawer overlay */}
+        {mobileSidebarOpen && (
+          <div className="fixed inset-0 z-40">
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setMobileSidebarOpen(false)}
+            />
+            <div className="absolute inset-y-0 left-0 w-72 bg-zinc-900 border-r border-zinc-800 z-50 shadow-2xl overflow-y-auto">
+              <Sidebar
+                user={user}
+                setUser={setUser}
+                tables={tables}
+                selectedSchema={selectedSchema}
+                setSelectedSchema={setSelectedSchema}
+                selectedTable={selectedTable}
+                setSelectedTable={handleSelectTableMobile}
+                setSelectedRow={setSelectedRow}
+                setRows={setRows}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Mobile TOC bottom sheet */}
+        {mobileTocOpen && selectedRow && contentField && toc.length > 0 && (
+          <div className="fixed inset-0 z-40">
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setMobileTocOpen(false)}
+            />
+            <div className="absolute bottom-0 left-0 right-0 max-h-[70vh] bg-zinc-900 border-t border-zinc-700 rounded-t-2xl z-50 overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-zinc-900 p-4 border-b border-zinc-800 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-zinc-300">On this page</h3>
+                <button
+                  onClick={() => setMobileTocOpen(false)}
+                  className="text-zinc-500 hover:text-zinc-300 text-lg w-8 h-8 flex items-center justify-center"
+                >
+                  x
+                </button>
+              </div>
+              <nav className="p-4">
+                {toc.map((item, i) => (
+                  <a
+                    key={`${item.slug}-${i}`}
+                    href={`#${item.slug}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setMobileTocOpen(false);
+                      setTimeout(() => {
+                        document.getElementById(item.slug)?.scrollIntoView({ behavior: "smooth" });
+                      }, 200);
+                    }}
+                    className={`block py-2.5 text-sm transition-colors ${
+                      item.level === 1
+                        ? "text-zinc-200 font-medium"
+                        : item.level === 2
+                        ? "text-zinc-400"
+                        : "text-zinc-500"
+                    } ${
+                      item.level === 1 ? "" : item.level === 2 ? "pl-4" : item.level === 3 ? "pl-8" : "pl-12"
+                    }`}
+                  >
+                    {item.text}
+                  </a>
+                ))}
+              </nav>
+            </div>
+          </div>
+        )}
+
+        {/* Main content area: single panel based on mobileView */}
+        <div className="flex-1 overflow-hidden">
+          {mobileView === "sidebar" && (
+            <div className="h-full flex flex-col">
+              <Sidebar
+                user={user}
+                setUser={setUser}
+                tables={tables}
+                selectedSchema={selectedSchema}
+                setSelectedSchema={setSelectedSchema}
+                selectedTable={selectedTable}
+                setSelectedTable={handleSelectTableMobile}
+                setSelectedRow={setSelectedRow}
+                setRows={setRows}
+                isMobileFullScreen
+              />
+            </div>
+          )}
+
+          {mobileView === "list" && selectedTable && (
+            <div className="h-full flex flex-col">
+              <MobileBackHeader
+                title={selectedTable}
+                subtitle={`${sortedRows.length} entries`}
+                onBack={() => goBack()}
+              />
+              <div className="flex-1 overflow-y-auto">
+                <RowList
+                  selectedSchema={selectedSchema}
+                  selectedTable={selectedTable}
+                  rows={rows}
+                  sortedRows={sortedRows}
+                  filteredRowsCount={filteredRows.length}
+                  selectedRow={selectedRow}
+                  setSelectedRow={handleSelectRowMobile}
+                  openTab={openTab}
+                  loading={loading}
+                  sortBy={sortBy}
+                  setSortBy={setSortBy}
+                  searchInput={searchInput}
+                  setSearchInput={setSearchInput}
+                  isServerSearching={isServerSearching}
+                  filterTag={filterTag}
+                  setFilterTag={setFilterTag}
+                  allTags={allTags}
+                  filters={filters}
+                  setFilters={setFilters}
+                  showFilters={showFilters}
+                  setShowFilters={setShowFilters}
+                  columns={columns}
+                  columnValues={columnValues}
+                  fkLookups={fkLookups}
+                  handleRefresh={handleRefresh}
+                  searchInputRef={searchInputRef}
+                  selectedRowIndex={selectedRowIndex}
+                  hasMore={hasMore}
+                  loadingMore={loadingMore}
+                  onLoadMore={handleLoadMore}
+                  isMobileFullScreen
+                />
+              </div>
+            </div>
+          )}
+
+          {mobileView === "list" && !selectedTable && (
+            <div className="h-full flex flex-col">
+              <MobileBackHeader
+                title="Tables"
+                onBack={() => goBack()}
+              />
+              <div className="flex-1 flex items-center justify-center text-zinc-600 text-sm">
+                Select a table from the sidebar
+              </div>
+            </div>
+          )}
+
+          {mobileView === "content" && (
+            <div className="h-full flex flex-col">
+              <MobileBackHeader
+                title={selectedRow ? getTitle(selectedRow, fkLookups) : "Content"}
+                subtitle={selectedTable ? `${selectedSchema} / ${selectedTable}` : undefined}
+                onBack={() => goBack()}
+              />
+              <div className="flex-1 overflow-y-auto">
+                {selectedRow ? (
+                  <ContentViewer
+                    selectedRow={selectedRow}
+                    selectedSchema={selectedSchema}
+                    selectedTable={selectedTable || ""}
+                    fkLookups={fkLookups}
+                    headingComponents={headingComponents}
+                    onFilterClick={(column, value) => {
+                      if (column === "tags") {
+                        setFilterTag(value);
+                      } else {
+                        setFilters([{ column, operator: "equals", value }]);
+                        setShowFilters(true);
+                      }
+                      pushTo("list");
+                    }}
+                    isMobile
+                  />
+                ) : (
+                  <EmptyState stats={dbStats} />
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom navigation bar */}
+        <BottomNav
+          mobileView={mobileView}
+          onTablesPress={() => {
+            if (mobileView === "sidebar") {
+              // Already on sidebar
+            } else {
+              setMobileSidebarOpen(true);
+            }
+          }}
+          onSearchPress={() => {
+            if (selectedTable) {
+              pushTo("list");
+              setTimeout(() => searchInputRef.current?.focus(), 200);
+            }
+          }}
+          onTocPress={() => {
+            if (selectedRow && toc.length > 0) {
+              setMobileTocOpen(true);
+            }
+          }}
+          onHelpPress={() => {
+            document.getElementById("pgpage-help-btn")?.click();
+          }}
+          hasToc={!!(selectedRow && contentField && toc.length > 0)}
+        />
+        {/* Hidden help button for programmatic trigger */}
+        <div className="hidden">
+          <HelpButton id="pgpage-help-btn" />
+        </div>
+      </div>
+    );
+  }
+
+  // ----- Tablet layout: two panels (list + content) -----
+  if (isTablet) {
+    return (
+      <div className="flex flex-col h-[100dvh]">
+        {/* Tablet sidebar drawer overlay */}
+        {mobileSidebarOpen && (
+          <div className="fixed inset-0 z-40">
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setMobileSidebarOpen(false)}
+            />
+            <div className="absolute inset-y-0 left-0 w-72 bg-zinc-900 border-r border-zinc-800 z-50 shadow-2xl overflow-y-auto">
+              <Sidebar
+                user={user}
+                setUser={setUser}
+                tables={tables}
+                selectedSchema={selectedSchema}
+                setSelectedSchema={setSelectedSchema}
+                selectedTable={selectedTable}
+                setSelectedTable={(table) => {
+                  setSelectedTable(table);
+                  setMobileSidebarOpen(false);
+                }}
+                setSelectedRow={setSelectedRow}
+                setRows={setRows}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tablet TOC bottom sheet */}
+        {mobileTocOpen && selectedRow && contentField && toc.length > 0 && (
+          <div className="fixed inset-0 z-40">
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setMobileTocOpen(false)}
+            />
+            <div className="absolute bottom-0 left-0 right-0 max-h-[60vh] bg-zinc-900 border-t border-zinc-700 rounded-t-2xl z-50 overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-zinc-900 p-4 border-b border-zinc-800 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-zinc-300">On this page</h3>
+                <button
+                  onClick={() => setMobileTocOpen(false)}
+                  className="text-zinc-500 hover:text-zinc-300 text-lg w-8 h-8 flex items-center justify-center"
+                >
+                  x
+                </button>
+              </div>
+              <nav className="p-4">
+                {toc.map((item, i) => (
+                  <a
+                    key={`${item.slug}-${i}`}
+                    href={`#${item.slug}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setMobileTocOpen(false);
+                      setTimeout(() => {
+                        document.getElementById(item.slug)?.scrollIntoView({ behavior: "smooth" });
+                      }, 200);
+                    }}
+                    className={`block py-2 text-sm transition-colors ${
+                      item.level === 1
+                        ? "text-zinc-200 font-medium"
+                        : item.level === 2
+                        ? "text-zinc-400"
+                        : "text-zinc-500"
+                    } ${
+                      item.level === 1 ? "" : item.level === 2 ? "pl-4" : item.level === 3 ? "pl-8" : "pl-12"
+                    }`}
+                  >
+                    {item.text}
+                  </a>
+                ))}
+              </nav>
+            </div>
+          </div>
+        )}
+
+        {/* Two-panel layout: list + content */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Row list */}
+          {selectedTable && (
+            <RowList
+              selectedSchema={selectedSchema}
+              selectedTable={selectedTable}
+              rows={rows}
+              sortedRows={sortedRows}
+              filteredRowsCount={filteredRows.length}
+              selectedRow={selectedRow}
+              setSelectedRow={setSelectedRow}
+              openTab={openTab}
+              loading={loading}
+              sortBy={sortBy}
+              setSortBy={setSortBy}
+              searchInput={searchInput}
+              setSearchInput={setSearchInput}
+              isServerSearching={isServerSearching}
+              filterTag={filterTag}
+              setFilterTag={setFilterTag}
+              allTags={allTags}
+              filters={filters}
+              setFilters={setFilters}
+              showFilters={showFilters}
+              setShowFilters={setShowFilters}
+              columns={columns}
+              columnValues={columnValues}
+              fkLookups={fkLookups}
+              handleRefresh={handleRefresh}
+              searchInputRef={searchInputRef}
+              selectedRowIndex={selectedRowIndex}
+              hasMore={hasMore}
+              loadingMore={loadingMore}
+              onLoadMore={handleLoadMore}
+            />
+          )}
+
+          {/* Content area */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <TabBar
+              openTabs={openTabs}
+              activeTabId={activeTabId}
+              switchTab={switchTab}
+              closeTab={closeTab}
+            />
+            <div className="flex-1 overflow-y-auto">
+              {selectedRow ? (
+                <ContentViewer
+                  selectedRow={selectedRow}
+                  selectedSchema={selectedSchema}
+                  selectedTable={selectedTable || ""}
+                  fkLookups={fkLookups}
+                  headingComponents={headingComponents}
+                  onFilterClick={(column, value) => {
+                    if (column === "tags") {
+                      setFilterTag(value);
+                    } else {
+                      setFilters([{ column, operator: "equals", value }]);
+                      setShowFilters(true);
+                    }
+                  }}
+                />
+              ) : (
+                <EmptyState stats={dbStats} />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom nav for tablet */}
+        <BottomNav
+          mobileView={mobileView}
+          onTablesPress={() => setMobileSidebarOpen(true)}
+          onSearchPress={() => {
+            if (selectedTable) {
+              setTimeout(() => searchInputRef.current?.focus(), 200);
+            }
+          }}
+          onTocPress={() => {
+            if (selectedRow && toc.length > 0) {
+              setMobileTocOpen(true);
+            }
+          }}
+          onHelpPress={() => {
+            document.getElementById("pgpage-help-btn-tablet")?.click();
+          }}
+          hasToc={!!(selectedRow && contentField && toc.length > 0)}
+        />
+        <div className="hidden">
+          <HelpButton id="pgpage-help-btn-tablet" />
+        </div>
+      </div>
+    );
+  }
+
+  // ----- Desktop layout: unchanged three-panel -----
   return (
     <div className="flex h-screen">
       {/* Panel toggle bar */}
@@ -502,21 +924,21 @@ export default function Home() {
           className={`w-7 h-7 rounded flex items-center justify-center text-xs ${showSidebar ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:bg-zinc-800"}`}
           title="Toggle schemas/tables"
         >
-          ☰
+          &#9776;
         </button>
         <button
           onClick={() => setShowRowList(!showRowList)}
           className={`w-7 h-7 rounded flex items-center justify-center text-xs ${showRowList ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:bg-zinc-800"}`}
           title="Toggle row list"
         >
-          ≡
+          &#8801;
         </button>
         <button
           onClick={() => setShowToc(!showToc)}
           className={`w-7 h-7 rounded flex items-center justify-center text-xs ${showToc ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:bg-zinc-800"}`}
           title="Toggle table of contents"
         >
-          ¶
+          &para;
         </button>
         <div className="flex-1" />
         <div className="mb-3">

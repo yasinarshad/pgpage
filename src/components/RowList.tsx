@@ -38,6 +38,7 @@ type RowListProps = {
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
+  isMobileFullScreen?: boolean;
 };
 
 function LoadingSkeleton() {
@@ -62,10 +63,11 @@ export function RowList({
   columns, columnValues, fkLookups, handleRefresh, searchInputRef,
   selectedRowIndex,
   hasMore, loadingMore, onLoadMore,
+  isMobileFullScreen,
 }: RowListProps) {
   return (
-    <div className="w-72 flex-shrink-0 border-r border-zinc-800 bg-zinc-925 overflow-y-auto">
-      <div className="p-3 border-b border-zinc-800">
+    <div className={`${isMobileFullScreen ? "w-full" : "w-72 flex-shrink-0"} border-r border-zinc-800 bg-zinc-925 overflow-y-auto`}>
+      <div className={`${isMobileFullScreen ? "p-4 sticky top-0 z-10 bg-zinc-925" : "p-3"} border-b border-zinc-800`}>
         <div className="flex items-center justify-between mb-2">
           <div>
             <h2 className="text-sm font-semibold text-zinc-300">{selectedTable}</h2>
@@ -162,7 +164,7 @@ export function RowList({
                   setTimeout(() => { el.style.outline = ""; }, 500);
                 }}
                 title={`Right-click to copy: ${selectedSchema}.${selectedTable}.id=${row.id}`}
-                className={`w-full text-left px-3 py-2 border-b border-zinc-800/50 ${
+                className={`w-full text-left px-3 ${isMobileFullScreen ? "py-3" : "py-2"} border-b border-zinc-800/50 ${
                   selectedRow?.id === row.id
                     ? "bg-zinc-800"
                     : idx === selectedRowIndex
