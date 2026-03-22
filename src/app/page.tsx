@@ -882,8 +882,8 @@ export default function Home() {
                   {getTitle(row, fkLookups)}
                 </div>
                 <div className="text-xs text-zinc-500 mt-0.5">
-                  {row.created_at
-                    ? new Date(row.created_at as string).toLocaleDateString()
+                  {(row.date_published || row.created_at)
+                    ? new Date(String(row.date_published || row.created_at)).toLocaleDateString()
                     : `#${row.id}`}
                 </div>
               </button>
@@ -946,9 +946,15 @@ export default function Home() {
                     {selectedSchema}/{selectedTable}/{String(selectedRow.id)}
                   </span>
                 )}
+                {Boolean(selectedRow.date_published) && (
+                  <span>
+                    Published:{" "}
+                    {new Date(String(selectedRow.date_published)).toLocaleDateString()}
+                  </span>
+                )}
                 {Boolean(selectedRow.created_at) && (
                   <span>
-                    Created:{" "}
+                    Added:{" "}
                     {new Date(String(selectedRow.created_at)).toLocaleString()}
                   </span>
                 )}
