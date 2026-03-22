@@ -16,6 +16,7 @@ import { ContentViewer } from "@/components/ContentViewer";
 import { TOCSidebar } from "@/components/TOCSidebar";
 import { TabBar } from "@/components/TabBar";
 import { EmptyState } from "@/components/EmptyState";
+import { HelpButton } from "@/components/HelpOverlay";
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -527,6 +528,10 @@ export default function Home() {
         >
           ¶
         </button>
+        <div className="flex-1" />
+        <div className="mb-3">
+          <HelpButton />
+        </div>
       </div>
 
       {/* Sidebar */}
