@@ -428,6 +428,36 @@ export default function Home() {
       .map((k) => ({ name: k, type: detectColType(firstRow[k]) }));
   }, [rows]);
 
+  // Collect unique values per column (for select-style filters)
+  const columnValues = useMemo(() => {
+    const result: Record<string, string[]> = {};
+    const longTextCols = new Set<string>();
+    for (const row of rows) {
+      for (const [k, v] of Object.entries(row)) {
+        if (v == null || k === "embedding" || k === "search_vector") continue;
+        // Skip columns with long text values (content, transcript, etc.)
+        if (typeof v === "string" && v.length > 200) { longTextCols.add(k); continue; }
+        if (!result[k]) result[k] = [];
+        if (Array.isArray(v)) {
+          for (const item of v) {
+            const s = String(item);
+            if (!result[k].includes(s)) result[k].push(s);
+          }
+        } else {
+          const s = String(v);
+          if (!result[k].includes(s)) result[k].push(s);
+        }
+      }
+    }
+    // Remove long text columns and columns with too many unique values (>200 = not useful as select)
+    for (const k of longTextCols) delete result[k];
+    for (const k of Object.keys(result)) {
+      if (result[k].length > 200) delete result[k];
+      else result[k].sort();
+    }
+    return result;
+  }, [rows]);
+
   // Filter then sort
   const filteredRows = rows.filter((row) => {
     // Tag filter
@@ -745,17 +775,34 @@ export default function Home() {
                       ))}
                     </select>
                     {!["not_empty", "is_empty", "is_true", "is_false"].includes(f.operator) && (
-                      <input
-                        type={columns.find((c) => c.name === f.column)?.type === "date" ? "date" : "text"}
-                        value={f.value}
-                        onChange={(e) => {
-                          const newFilters = [...filters];
-                          newFilters[i] = { ...f, value: e.target.value };
-                          setFilters(newFilters);
-                        }}
-                        placeholder="value"
-                        className="bg-zinc-800 text-zinc-300 text-[10px] rounded px-1 py-0.5 border border-zinc-700 outline-none flex-1 min-w-0 placeholder-zinc-600"
-                      />
+                      columnValues[f.column] && columnValues[f.column].length <= 200 ? (
+                        <select
+                          value={f.value}
+                          onChange={(e) => {
+                            const newFilters = [...filters];
+                            newFilters[i] = { ...f, value: e.target.value };
+                            setFilters(newFilters);
+                          }}
+                          className="bg-zinc-800 text-zinc-300 text-[10px] rounded px-1 py-0.5 border border-zinc-700 outline-none flex-1 min-w-0"
+                        >
+                          <option value="">select...</option>
+                          {columnValues[f.column].map((v) => (
+                            <option key={v} value={v}>{v.length > 40 ? v.slice(0, 40) + "..." : v}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={columns.find((c) => c.name === f.column)?.type === "date" ? "date" : "text"}
+                          value={f.value}
+                          onChange={(e) => {
+                            const newFilters = [...filters];
+                            newFilters[i] = { ...f, value: e.target.value };
+                            setFilters(newFilters);
+                          }}
+                          placeholder="value"
+                          className="bg-zinc-800 text-zinc-300 text-[10px] rounded px-1 py-0.5 border border-zinc-700 outline-none flex-1 min-w-0 placeholder-zinc-600"
+                        />
+                      )
                     )}
                     <button
                       onClick={() => setFilters(filters.filter((_, idx) => idx !== i))}
