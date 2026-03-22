@@ -17,6 +17,7 @@ import { ContentViewer } from "@/components/ContentViewer";
 import { TOCSidebar } from "@/components/TOCSidebar";
 import { TabBar } from "@/components/TabBar";
 import { EmptyState } from "@/components/EmptyState";
+import { MasterFeed } from "@/components/MasterFeed";
 import { HelpButton } from "@/components/HelpOverlay";
 import { BottomNav } from "@/components/BottomNav";
 import { MobileBackHeader } from "@/components/MobileBackHeader";

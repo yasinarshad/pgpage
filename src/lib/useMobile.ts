@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 
 export type MobileView = "sidebar" | "list" | "content";
 
-/** Breakpoints matching Tailwind: md=768, lg=1024 */
+/** Breakpoints: phone <480, tablet 480-1023, desktop 1024+ */
 export function useBreakpoint() {
   const [bp, setBp] = useState<"phone" | "tablet" | "desktop">("desktop");
 
@@ -12,7 +12,7 @@ export function useBreakpoint() {
     function check() {
       const w = window.innerWidth;
       if (w >= 1024) setBp("desktop");
-      else if (w >= 768) setBp("tablet");
+      else if (w >= 480) setBp("tablet");
       else setBp("phone");
     }
     check();
