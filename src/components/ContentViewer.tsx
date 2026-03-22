@@ -14,18 +14,20 @@ type ContentViewerProps = {
   selectedTable: string;
   fkLookups: Record<string, Record<string, string>>;
   headingComponents: Record<string, React.ComponentType<React.HTMLAttributes<HTMLHeadingElement>>>;
+  onFilterClick?: (column: string, value: string) => void;
 };
 
 export function ContentViewer({
-  selectedRow, selectedSchema, selectedTable, fkLookups, headingComponents,
+  selectedRow, selectedSchema, selectedTable, fkLookups, headingComponents, onFilterClick,
 }: ContentViewerProps) {
   const contentField = getContentField(selectedRow);
   const contentStr = contentField ? String(selectedRow[contentField]) : "";
   const words = useMemo(() => wordCount(contentStr), [contentStr]);
   const minutes = useMemo(() => readingTime(words), [words]);
 
+  const clickable = "cursor-pointer hover:text-zinc-200 transition-colors";
+
   if (!contentField) {
-    // No markdown content - show as JSON
     return (
       <div className="max-w-4xl mx-auto px-8 py-6">
         <h2 className="text-lg font-semibold mb-4">
@@ -89,15 +91,36 @@ export function ContentViewer({
             </span>
           )}
           {Boolean(selectedRow.platform) && (
-            <span>Platform: {String(selectedRow.platform)}</span>
+            <span
+              className={onFilterClick ? clickable : ""}
+              onClick={() => onFilterClick?.("platform", String(selectedRow.platform))}
+              title={onFilterClick ? "Click to filter by this platform" : undefined}
+            >
+              Platform: {String(selectedRow.platform)}
+            </span>
           )}
           {Boolean(selectedRow.topic) && (
-            <span>Topic: {String(selectedRow.topic)}</span>
+            <span
+              className={onFilterClick ? clickable : ""}
+              onClick={() => onFilterClick?.("topic", String(selectedRow.topic))}
+              title={onFilterClick ? "Click to filter by this topic" : undefined}
+            >
+              Topic: {String(selectedRow.topic)}
+            </span>
           )}
           {Object.entries(fkLookups).map(([col, lookup]) => {
             const val = String(selectedRow[col] ?? "");
             if (!lookup[val]) return null;
-            return <span key={col}>{col.replace(/_id$/, "")}: {lookup[val]}</span>;
+            return (
+              <span
+                key={col}
+                className={onFilterClick ? clickable : ""}
+                onClick={() => onFilterClick?.(col, val)}
+                title={onFilterClick ? `Click to filter by ${lookup[val]}` : undefined}
+              >
+                {col.replace(/_id$/, "")}: {lookup[val]}
+              </span>
+            );
           })}
         </div>
         {Array.isArray(selectedRow.tags) && (
@@ -105,7 +128,9 @@ export function ContentViewer({
             {(selectedRow.tags as string[]).map((tag) => (
               <span
                 key={tag}
-                className="px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded text-xs"
+                className={`px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded text-xs ${onFilterClick ? "cursor-pointer hover:bg-zinc-700 hover:text-zinc-200 transition-colors" : ""}`}
+                onClick={() => onFilterClick?.("tags", tag)}
+                title={onFilterClick ? `Click to filter by "${tag}"` : undefined}
               >
                 {tag}
               </span>

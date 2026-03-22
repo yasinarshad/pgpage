@@ -603,6 +603,14 @@ export default function Home() {
               selectedTable={selectedTable || ""}
               fkLookups={fkLookups}
               headingComponents={headingComponents}
+              onFilterClick={(column, value) => {
+                if (column === "tags") {
+                  setFilterTag(value);
+                } else {
+                  setFilters([{ column, operator: "equals", value }]);
+                  setShowFilters(true);
+                }
+              }}
             />
           ) : (
             <EmptyState stats={dbStats} />
