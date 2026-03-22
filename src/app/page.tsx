@@ -223,6 +223,18 @@ export default function Home() {
     setFilterTag(null);
     setFkLookups({});
     setSelectedRowIndex(-1);
+
+    if (selectedTable === "__recent__") {
+      // Load master feed instead of a regular table
+      setLoading(true);
+      supabase.rpc("pg_master_feed", { row_limit: 100 })
+        .then(({ data }) => {
+          if (data) setRows(data as TableRow[]);
+          setLoading(false);
+        });
+      return;
+    }
+
     loadRows(selectedSchema, selectedTable);
     supabase.rpc("pg_resolve_fks", { p_schema: selectedSchema, p_table: selectedTable })
       .then(({ data }) => { if (data) setFkLookups(data as Record<string, Record<string, string>>); });
@@ -466,7 +478,13 @@ export default function Home() {
 
   // Tab management
   const openTab = (row: TableRow) => {
-    const id = row.id as number;
+    // If from master feed, navigate to the actual schema/table
+    if (selectedTable === "__recent__" && row.schema_name && row.table_name) {
+      navigateFromFeed(String(row.schema_name), String(row.table_name), String(row.id));
+      return;
+    }
+
+    const id = row.id as string | number;
     const existing = openTabs.find((t) => t.id === id && t.schema === selectedSchema && t.table === selectedTable);
     if (existing) {
       setActiveTabId(id);

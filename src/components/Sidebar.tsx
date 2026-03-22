@@ -53,6 +53,18 @@ export function Sidebar({
 
       {/* Tables list */}
       <div className="p-2 flex-1">
+        {/* Recent Activity — virtual cross-schema table */}
+        <button
+          onClick={() => setSelectedTable("__recent__")}
+          className={`w-full text-left px-3 py-1.5 rounded text-sm mb-1 ${
+            selectedTable === "__recent__"
+              ? "bg-blue-900/40 text-blue-300"
+              : "text-blue-400/70 hover:bg-zinc-800"
+          }`}
+        >
+          Recent Activity
+        </button>
+        <div className="border-b border-zinc-800 mb-1" />
         {(tables[selectedSchema] || [])
           .filter((t) => !t.startsWith("directus_") && t !== "schema_changes")
           .map((table) => (
