@@ -49,8 +49,8 @@ function getContentField(row: TableRow): string | null {
   return null;
 }
 
-function getTitle(row: TableRow): string {
-  for (const key of ["title", "name", "person_name", "category", "question", "subject"]) {
+function getTitle(row: TableRow, fkMap?: Record<string, Record<string, string>>): string {
+  for (const key of ["title", "database_title", "name", "person_name", "category", "question", "subject"]) {
     if (row[key] && typeof row[key] === "string" && (row[key] as string).length > 0) {
       return row[key] as string;
     }
@@ -59,7 +59,20 @@ function getTitle(row: TableRow): string {
   if (content && typeof row[content] === "string") {
     return (row[content] as string).slice(0, 60) + "...";
   }
+  // Try to build title from FK-resolved values
+  if (fkMap) {
+    for (const [col, lookup] of Object.entries(fkMap)) {
+      const val = String(row[col] || "");
+      if (lookup[val]) return lookup[val];
+    }
+  }
   return `Row ${row.id}`;
+}
+
+function resolveValue(col: string, value: unknown, fkMap: Record<string, Record<string, string>>): string {
+  const s = String(value ?? "");
+  if (fkMap[col]?.[s]) return `${fkMap[col][s]}`;
+  return s;
 }
 
 function parseHash(): { schema?: SchemaName; table?: string; id?: string | number } {
@@ -247,6 +260,7 @@ export default function Home() {
   const [isServerSearching, setIsServerSearching] = useState(false);
   const [filters, setFilters] = useState<FilterRule[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [fkLookups, setFkLookups] = useState<Record<string, Record<string, string>>>({});
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | number | null>(null);
 
@@ -296,7 +310,7 @@ export default function Home() {
                 setSelectedRow(match);
                 // Also open as a tab
                 const tabId = match.id as string | number;
-                setOpenTabs([{ schema, table, row: match, id: tabId, title: getTitle(match) }]);
+                setOpenTabs([{ schema, table, row: match, id: tabId, title: getTitle(match, fkLookups) }]);
                 setActiveTabId(tabId);
               }
             }
@@ -364,7 +378,11 @@ export default function Home() {
     setSearchQuery("");
     setFilters([]);
     setFilterTag(null);
+    setFkLookups({});
     loadRows(selectedSchema, selectedTable);
+    // Load FK lookups for this table
+    supabase.rpc("pg_resolve_fks", { p_schema: selectedSchema, p_table: selectedTable })
+      .then(({ data }) => { if (data) setFkLookups(data as Record<string, Record<string, string>>); });
   }, [selectedSchema, selectedTable, loadRows]);
 
   // Debounced server-side search
@@ -538,7 +556,7 @@ export default function Home() {
         table: selectedTable!,
         row,
         id,
-        title: getTitle(row),
+        title: getTitle(row, fkLookups),
       };
       setOpenTabs((prev) => [...prev, tab]);
       setActiveTabId(id);
@@ -786,9 +804,10 @@ export default function Home() {
                           className="bg-zinc-800 text-zinc-300 text-[10px] rounded px-1 py-0.5 border border-zinc-700 outline-none flex-1 min-w-0"
                         >
                           <option value="">select...</option>
-                          {columnValues[f.column].map((v) => (
-                            <option key={v} value={v}>{v.length > 40 ? v.slice(0, 40) + "..." : v}</option>
-                          ))}
+                          {columnValues[f.column].map((v) => {
+                            const label = fkLookups[f.column]?.[v] || v;
+                            return <option key={v} value={v}>{label.length > 50 ? label.slice(0, 50) + "..." : label}</option>;
+                          })}
                         </select>
                       ) : (
                         <input
@@ -860,7 +879,7 @@ export default function Home() {
                 }`}
               >
                 <div className="text-sm text-zinc-200 truncate">
-                  {getTitle(row)}
+                  {getTitle(row, fkLookups)}
                 </div>
                 <div className="text-xs text-zinc-500 mt-0.5">
                   {row.created_at
@@ -939,6 +958,11 @@ export default function Home() {
                 {Boolean(selectedRow.topic) && (
                   <span>Topic: {String(selectedRow.topic)}</span>
                 )}
+                {Object.entries(fkLookups).map(([col, lookup]) => {
+                  const val = String(selectedRow[col] ?? "");
+                  if (!lookup[val]) return null;
+                  return <span key={col}>{col.replace(/_id$/, "")}: {lookup[val]}</span>;
+                })}
               </div>
               {Array.isArray(selectedRow.tags) && (
                 <div className="flex flex-wrap gap-1 mt-2">
@@ -964,7 +988,7 @@ export default function Home() {
         ) : selectedRow ? (
           <div className="max-w-4xl mx-auto px-8 py-6">
             <h2 className="text-lg font-semibold mb-4">
-              {getTitle(selectedRow)}
+              {getTitle(selectedRow, fkLookups)}
             </h2>
             <pre className="text-sm text-zinc-400 whitespace-pre-wrap">
               {JSON.stringify(selectedRow, null, 2)}
