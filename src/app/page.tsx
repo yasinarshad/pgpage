@@ -63,72 +63,62 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load tables for each schema + compute stats for empty state
+  // On mount: restore hash URL immediately (parallel with table loading)
   useEffect(() => {
+    const { schema, table, id } = parseHash();
+
+    // If we have a direct link, fetch the row IMMEDIATELY — don't wait for tables
+    if (schema && table && id && SCHEMAS.some((s) => s.name === schema)) {
+      setSelectedSchema(schema);
+      setSelectedTable(table);
+      supabase.rpc("pg_query_table", {
+        p_schema: schema,
+        p_table: table,
+        row_limit: 100,
+      }).then(({ data }) => {
+        if (data) {
+          setRows(data as TableRow[]);
+          setHasMore((data as TableRow[]).length === 100);
+          setRowOffset(100);
+          const match = (data as TableRow[]).find((r) => String(r.id) === String(id));
+          if (match) {
+            setSelectedRow(match);
+            const tabId = match.id as string | number;
+            setOpenTabs([{ schema, table, row: match, id: tabId, title: getTitle(match) }]);
+            setActiveTabId(tabId);
+          }
+        }
+      });
+      // Also load FK lookups for this table
+      supabase.rpc("pg_resolve_fks", { p_schema: schema, p_table: table })
+        .then(({ data }) => { if (data) setFkLookups(data as Record<string, Record<string, string>>); });
+    } else if (schema && SCHEMAS.some((s) => s.name === schema)) {
+      setSelectedSchema(schema);
+      if (table) setSelectedTable(table);
+    }
+
+    // Load table lists in parallel (for sidebar)
     async function loadTables() {
       const result: Record<string, string[]> = {};
       let totalTables = 0;
       let schemaCount = 0;
-      for (const schema of SCHEMAS) {
-        const { data } = await supabase.rpc("pg_tables_list", {
-          p_schema: schema.name,
-        });
+      // Fetch all schemas in parallel
+      const promises = SCHEMAS.map((s) =>
+        supabase.rpc("pg_tables_list", { p_schema: s.name }).then(({ data }) => ({ name: s.name, data }))
+      );
+      const results = await Promise.all(promises);
+      for (const { name, data } of results) {
         if (data) {
           const filtered = (data as string[]).filter(
             (t: string) => !t.startsWith("directus_") && t !== "schema_changes"
           );
-          result[schema.name] = data as string[];
+          result[name] = data as string[];
           totalTables += filtered.length;
           if (filtered.length > 0) schemaCount++;
         }
       }
       setTables(result);
-
-      // Compute row count stats in background (don't block table loading)
       setDbStats({ schemas: schemaCount, tables: totalTables, rows: 0 });
-      let rowCount = 0;
-      for (const schema of SCHEMAS) {
-        const filtered = (result[schema.name] || []).filter(
-          (t: string) => !t.startsWith("directus_") && t !== "schema_changes"
-        );
-        for (const table of filtered) {
-          const { data: rowData } = await supabase.rpc("pg_query_table", {
-            p_schema: schema.name,
-            p_table: table,
-            row_limit: 500,
-          });
-          if (rowData && Array.isArray(rowData)) rowCount += rowData.length;
-        }
-      }
-      setDbStats({ schemas: schemaCount, tables: totalTables, rows: rowCount });
-
-      // Restore state from URL hash after tables are loaded
-      const { schema, table, id } = parseHash();
-      if (schema && SCHEMAS.some((s) => s.name === schema)) {
-        setSelectedSchema(schema);
-        if (table) {
-          setSelectedTable(table);
-          if (id) {
-            const { data } = await supabase.rpc("pg_query_table", {
-              p_schema: schema,
-              p_table: table,
-              row_limit: 100,
-            });
-            if (data) {
-              setRows(data as TableRow[]);
-              setHasMore((data as TableRow[]).length === 100);
-              setRowOffset(100);
-              const match = (data as TableRow[]).find((r) => String(r.id) === String(id));
-              if (match) {
-                setSelectedRow(match);
-                const tabId = match.id as string | number;
-                setOpenTabs([{ schema, table, row: match, id: tabId, title: getTitle(match, fkLookups) }]);
-                setActiveTabId(tabId);
-              }
-            }
-          }
-        }
-      }
       setInitialized(true);
     }
     loadTables();
