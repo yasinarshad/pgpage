@@ -447,6 +447,15 @@ export default function Home() {
   const viewSchema = (selectedTable === "__recent__" && currentTab) ? currentTab.schema : selectedSchema;
   const viewTable = (selectedTable === "__recent__" && currentTab) ? currentTab.table : (selectedTable || "");
 
+  // When in Recent Activity, regular clicks must go through openTab to fetch full row
+  const handleRowSelect = useCallback((row: TableRow) => {
+    if (selectedTable === "__recent__") {
+      openTab(row);
+    } else {
+      setSelectedRow(row);
+    }
+  }, [selectedTable]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Refresh current table
   const handleRefresh = () => {
     if (selectedTable) {
@@ -571,9 +580,12 @@ export default function Home() {
 
   // Mobile: select row -> push to content
   const handleSelectRowMobile = (row: TableRow) => {
-    setSelectedRow(row);
-    if (!isDesktop) {
-      pushTo("content");
+    if (selectedTable === "__recent__") {
+      openTab(row);
+      if (!isDesktop) pushTo("content");
+    } else {
+      setSelectedRow(row);
+      if (!isDesktop) pushTo("content");
     }
   };
 
@@ -902,7 +914,7 @@ export default function Home() {
               sortedRows={sortedRows}
               filteredRowsCount={filteredRows.length}
               selectedRow={selectedRow}
-              setSelectedRow={setSelectedRow}
+              setSelectedRow={handleRowSelect}
               openTab={openTab}
               loading={loading}
               sortBy={sortBy}
@@ -1043,7 +1055,7 @@ export default function Home() {
           sortedRows={sortedRows}
           filteredRowsCount={filteredRows.length}
           selectedRow={selectedRow}
-          setSelectedRow={setSelectedRow}
+          setSelectedRow={handleRowSelect}
           openTab={openTab}
           loading={loading}
           sortBy={sortBy}
