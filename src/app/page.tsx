@@ -7,6 +7,14 @@ import remarkGfm from "remark-gfm";
 
 type TableRow = Record<string, unknown>;
 
+type Tab = {
+  schema: SchemaName;
+  table: string;
+  row: TableRow;
+  id: number;
+  title: string;
+};
+
 type TocItem = { level: number; text: string; slug: string };
 
 function extractToc(markdown: string): TocItem[] {
@@ -82,6 +90,8 @@ export default function Home() {
   const [showToc, setShowToc] = useState(true);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [openTabs, setOpenTabs] = useState<Tab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<number | null>(null);
 
   // Load tables for each schema
   useEffect(() => {
@@ -247,6 +257,52 @@ export default function Home() {
     }
   };
 
+  // Tab management
+  const openTab = (row: TableRow) => {
+    const id = row.id as number;
+    const existing = openTabs.find((t) => t.id === id && t.schema === selectedSchema && t.table === selectedTable);
+    if (existing) {
+      setActiveTabId(id);
+    } else {
+      const tab: Tab = {
+        schema: selectedSchema,
+        table: selectedTable!,
+        row,
+        id,
+        title: getTitle(row),
+      };
+      setOpenTabs((prev) => [...prev, tab]);
+      setActiveTabId(id);
+    }
+    setSelectedRow(row);
+  };
+
+  const closeTab = (tabId: number, tabSchema: string, tabTable: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const newTabs = openTabs.filter((t) => !(t.id === tabId && t.schema === tabSchema && t.table === tabTable));
+    setOpenTabs(newTabs);
+    if (activeTabId === tabId) {
+      if (newTabs.length > 0) {
+        const last = newTabs[newTabs.length - 1];
+        setActiveTabId(last.id);
+        setSelectedRow(last.row);
+      } else {
+        setActiveTabId(null);
+        setSelectedRow(null);
+      }
+    }
+  };
+
+  const switchTab = (tab: Tab) => {
+    setActiveTabId(tab.id);
+    setSelectedRow(tab.row);
+    setSelectedSchema(tab.schema);
+    setSelectedTable(tab.table);
+  };
+
+  const activeTab = openTabs.find((t) => t.id === activeTabId && t.schema === selectedSchema && t.table === selectedTable)
+    || openTabs.find((t) => t.id === activeTabId);
+
   return (
     <div className="flex h-screen">
       {/* Panel toggle bar */}
@@ -395,7 +451,7 @@ export default function Home() {
             sortedRows.map((row) => (
               <button
                 key={row.id as number}
-                onClick={() => setSelectedRow(row)}
+                onClick={() => openTab(row)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   const path = `${selectedSchema}.${selectedTable}.id=${row.id}`;
@@ -426,7 +482,37 @@ export default function Home() {
       )}
 
       {/* Content area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Tab bar */}
+        {openTabs.length > 0 && (
+          <div className="flex-shrink-0 flex items-center border-b border-zinc-800 bg-zinc-900 overflow-x-auto">
+            {openTabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              return (
+                <button
+                  key={`${tab.schema}-${tab.table}-${tab.id}`}
+                  onClick={() => switchTab(tab)}
+                  className={`group flex items-center gap-1.5 px-3 py-1.5 text-xs border-r border-zinc-800 whitespace-nowrap ${
+                    isActive
+                      ? "bg-zinc-950 text-zinc-100 border-b-2 border-b-blue-500"
+                      : "bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                  }`}
+                >
+                  <span className="max-w-[160px] truncate">{tab.title}</span>
+                  <span className="text-[10px] text-zinc-600">{tab.table}</span>
+                  <span
+                    onClick={(e) => closeTab(tab.id, tab.schema, tab.table, e)}
+                    className="ml-1 text-zinc-600 hover:text-zinc-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto">
         {selectedRow && contentField ? (
           <div className="max-w-4xl mx-auto px-8 py-6">
             {/* Properties bar */}
@@ -502,6 +588,7 @@ export default function Home() {
             </div>
           </div>
         )}
+      </div>
       </div>
 
       {/* TOC sidebar */}
