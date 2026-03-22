@@ -25,8 +25,11 @@ export function slugify(text: string): string {
 }
 
 export function getContentField(row: TableRow): string | null {
+  // These fields are rendered in collapsible sections, not as main content
+  const collapsibleOnly = new Set(["yasin_notes", "key_takeaways", "raw_notes"]);
   // Check for actual content fields first (from full row fetches)
   for (const key of ["content", "summary", "decision", "description", "question", "transcript"]) {
+    if (collapsibleOnly.has(key)) continue;
     if (row[key] && typeof row[key] === "string" && (row[key] as string).length > 30) {
       return key;
     }

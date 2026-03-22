@@ -153,6 +153,35 @@ export function ContentViewer({
         )}
       </div>
 
+      {/* Collapsible note sections */}
+      {(() => {
+        const noteSections = [
+          { key: "yasin_notes", label: "📝 Yasin's Notes", openByDefault: true },
+          { key: "key_takeaways", label: "💡 Key Takeaways", openByDefault: false },
+          { key: "raw_notes", label: "📋 Raw Notes", openByDefault: false },
+        ].filter(({ key }) => {
+          const val = selectedRow[key];
+          return val && typeof val === "string" && (val as string).trim().length > 0;
+        });
+        if (noteSections.length === 0) return null;
+        return (
+          <div className="mb-6 space-y-2">
+            {noteSections.map(({ key, label, openByDefault }) => (
+              <details key={key} className="mb-3" open={openByDefault || undefined}>
+                <summary className="text-sm font-medium text-zinc-300 cursor-pointer hover:text-zinc-100">
+                  {label}
+                </summary>
+                <div className="mt-2 pl-4 border-l-2 border-zinc-700 text-sm text-zinc-400">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {String(selectedRow[key])}
+                  </ReactMarkdown>
+                </div>
+              </details>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Rendered markdown */}
       <div className="pgpage-prose">
         <ReactMarkdown
