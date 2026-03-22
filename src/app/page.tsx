@@ -50,7 +50,11 @@ function getContentField(row: TableRow): string | null {
 }
 
 function getTitle(row: TableRow): string {
-  if (row.title && typeof row.title === "string") return row.title;
+  for (const key of ["title", "name", "person_name", "category", "question", "subject"]) {
+    if (row[key] && typeof row[key] === "string" && (row[key] as string).length > 0) {
+      return row[key] as string;
+    }
+  }
   const content = getContentField(row);
   if (content && typeof row[content] === "string") {
     return (row[content] as string).slice(0, 60) + "...";
