@@ -442,6 +442,11 @@ export default function Home() {
     },
   }), []);
 
+  // When viewing from Recent Activity, use the tab's schema/table for display
+  const currentTab = openTabs.find((t) => t.id === activeTabId);
+  const viewSchema = (selectedTable === "__recent__" && currentTab) ? currentTab.schema : selectedSchema;
+  const viewTable = (selectedTable === "__recent__" && currentTab) ? currentTab.table : (selectedTable || "");
+
   // Refresh current table
   const handleRefresh = () => {
     if (selectedTable) {
@@ -607,7 +612,7 @@ export default function Home() {
                 user={user}
                 setUser={setUser}
                 tables={tables}
-                selectedSchema={selectedSchema}
+                selectedSchema={viewSchema}
                 setSelectedSchema={setSelectedSchema}
                 selectedTable={selectedTable}
                 setSelectedTable={handleSelectTableMobile}
@@ -673,7 +678,7 @@ export default function Home() {
                 user={user}
                 setUser={setUser}
                 tables={tables}
-                selectedSchema={selectedSchema}
+                selectedSchema={viewSchema}
                 setSelectedSchema={setSelectedSchema}
                 selectedTable={selectedTable}
                 setSelectedTable={handleSelectTableMobile}
@@ -693,7 +698,7 @@ export default function Home() {
               />
               <div className="flex-1 overflow-y-auto">
                 <RowList
-                  selectedSchema={selectedSchema}
+                  selectedSchema={viewSchema}
                   selectedTable={selectedTable}
                   rows={rows}
                   sortedRows={sortedRows}
@@ -745,15 +750,15 @@ export default function Home() {
             <div className="h-full flex flex-col">
               <MobileBackHeader
                 title={selectedRow ? getTitle(selectedRow, fkLookups) : "Content"}
-                subtitle={selectedTable ? `${selectedSchema} / ${selectedTable}` : undefined}
+                subtitle={viewTable ? `${viewSchema} / ${viewTable}` : undefined}
                 onBack={() => goBack()}
               />
               <div className="flex-1 overflow-y-auto">
                 {selectedRow ? (
                   <ContentViewer
                     selectedRow={selectedRow}
-                    selectedSchema={selectedSchema}
-                    selectedTable={selectedTable || ""}
+                    selectedSchema={viewSchema}
+                    selectedTable={viewTable}
                     fkLookups={fkLookups}
                     headingComponents={headingComponents}
                     onFilterClick={(column, value) => {
@@ -825,7 +830,7 @@ export default function Home() {
                 user={user}
                 setUser={setUser}
                 tables={tables}
-                selectedSchema={selectedSchema}
+                selectedSchema={viewSchema}
                 setSelectedSchema={setSelectedSchema}
                 selectedTable={selectedTable}
                 setSelectedTable={(table) => {
@@ -891,7 +896,7 @@ export default function Home() {
           {/* Row list */}
           {selectedTable && (
             <RowList
-              selectedSchema={selectedSchema}
+              selectedSchema={viewSchema}
               selectedTable={selectedTable}
               rows={rows}
               sortedRows={sortedRows}
@@ -936,8 +941,8 @@ export default function Home() {
               {selectedRow ? (
                 <ContentViewer
                   selectedRow={selectedRow}
-                  selectedSchema={selectedSchema}
-                  selectedTable={selectedTable || ""}
+                  selectedSchema={viewSchema}
+                  selectedTable={viewTable}
                   fkLookups={fkLookups}
                   headingComponents={headingComponents}
                   onFilterClick={(column, value) => {
@@ -1020,7 +1025,7 @@ export default function Home() {
           user={user}
           setUser={setUser}
           tables={tables}
-          selectedSchema={selectedSchema}
+          selectedSchema={viewSchema}
           setSelectedSchema={setSelectedSchema}
           selectedTable={selectedTable}
           setSelectedTable={setSelectedTable}
@@ -1032,7 +1037,7 @@ export default function Home() {
       {/* Row list */}
       {showRowList && selectedTable && (
         <RowList
-          selectedSchema={selectedSchema}
+          selectedSchema={viewSchema}
           selectedTable={selectedTable}
           rows={rows}
           sortedRows={sortedRows}
@@ -1079,8 +1084,8 @@ export default function Home() {
           {selectedRow ? (
             <ContentViewer
               selectedRow={selectedRow}
-              selectedSchema={selectedSchema}
-              selectedTable={selectedTable || ""}
+              selectedSchema={viewSchema}
+              selectedTable={viewTable}
               fkLookups={fkLookups}
               headingComponents={headingComponents}
               onFilterClick={(column, value) => {
