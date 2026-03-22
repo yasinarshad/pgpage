@@ -437,6 +437,33 @@ export default function Home() {
     }
   };
 
+  // Navigate from master feed
+  const navigateFromFeed = useCallback(async (schema: string, table: string, id: string) => {
+    const s = schema as SchemaName;
+    setSelectedSchema(s);
+    setSelectedTable(table);
+    // Load rows and select the specific one
+    const { data } = await supabase.rpc("pg_query_table", {
+      p_schema: schema,
+      p_table: table,
+      row_limit: 100,
+    });
+    if (data) {
+      setRows(data as TableRow[]);
+      const match = (data as TableRow[]).find((r) => String(r.id) === id);
+      if (match) {
+        setSelectedRow(match);
+        const tabId = match.id as string | number;
+        const title = getTitle(match, fkLookups);
+        if (!openTabs.find((t) => t.id === tabId && t.schema === s && t.table === table)) {
+          setOpenTabs((prev) => [...prev, { schema: s, table, row: match, id: tabId, title }]);
+        }
+        setActiveTabId(tabId);
+        setHash(schema, table, tabId);
+      }
+    }
+  }, [fkLookups, openTabs]);
+
   // Tab management
   const openTab = (row: TableRow) => {
     const id = row.id as number;
@@ -701,7 +728,7 @@ export default function Home() {
                     isMobile
                   />
                 ) : (
-                  <EmptyState stats={dbStats} />
+                  <MasterFeed onNavigate={navigateFromFeed} />
                 )}
               </div>
             </div>
@@ -883,7 +910,7 @@ export default function Home() {
                   }}
                 />
               ) : (
-                <EmptyState stats={dbStats} />
+                <MasterFeed onNavigate={navigateFromFeed} />
               )}
             </div>
           </div>
@@ -1026,7 +1053,7 @@ export default function Home() {
               }}
             />
           ) : (
-            <EmptyState stats={dbStats} />
+            <MasterFeed onNavigate={navigateFromFeed} />
           )}
         </div>
       </div>
