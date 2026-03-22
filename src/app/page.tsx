@@ -83,6 +83,99 @@ function setHash(schema: string, table?: string, id?: string | number) {
   window.history.replaceState(null, "", `#${parts.join("/")}`);
 }
 
+type FilterRule = {
+  column: string;
+  operator: string;
+  value: string;
+};
+
+type ColType = "text" | "number" | "date" | "array" | "boolean" | "unknown";
+
+function detectColType(value: unknown): ColType {
+  if (value === null || value === undefined) return "unknown";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "number") return "number";
+  if (typeof value === "string") {
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return "date";
+  }
+  return "text";
+}
+
+const OPERATORS: Record<ColType, { value: string; label: string }[]> = {
+  text: [
+    { value: "contains", label: "contains" },
+    { value: "equals", label: "equals" },
+    { value: "starts_with", label: "starts with" },
+    { value: "not_empty", label: "is not empty" },
+    { value: "is_empty", label: "is empty" },
+  ],
+  number: [
+    { value: "eq", label: "=" },
+    { value: "gt", label: ">" },
+    { value: "lt", label: "<" },
+    { value: "gte", label: ">=" },
+    { value: "lte", label: "<=" },
+  ],
+  date: [
+    { value: "after", label: "after" },
+    { value: "before", label: "before" },
+    { value: "equals", label: "equals" },
+  ],
+  array: [
+    { value: "contains", label: "contains" },
+    { value: "not_empty", label: "is not empty" },
+    { value: "is_empty", label: "is empty" },
+  ],
+  boolean: [
+    { value: "is_true", label: "is true" },
+    { value: "is_false", label: "is false" },
+  ],
+  unknown: [
+    { value: "not_empty", label: "is not empty" },
+    { value: "is_empty", label: "is empty" },
+  ],
+};
+
+function applyFilter(row: TableRow, filter: FilterRule): boolean {
+  const val = row[filter.column];
+  const filterVal = filter.value.toLowerCase();
+
+  switch (filter.operator) {
+    case "contains":
+      if (Array.isArray(val)) return val.some((v) => String(v).toLowerCase().includes(filterVal));
+      return String(val || "").toLowerCase().includes(filterVal);
+    case "equals":
+      return String(val || "").toLowerCase() === filterVal;
+    case "starts_with":
+      return String(val || "").toLowerCase().startsWith(filterVal);
+    case "not_empty":
+      return val != null && val !== "" && !(Array.isArray(val) && val.length === 0);
+    case "is_empty":
+      return val == null || val === "" || (Array.isArray(val) && val.length === 0);
+    case "eq":
+      return Number(val) === Number(filter.value);
+    case "gt":
+      return Number(val) > Number(filter.value);
+    case "lt":
+      return Number(val) < Number(filter.value);
+    case "gte":
+      return Number(val) >= Number(filter.value);
+    case "lte":
+      return Number(val) <= Number(filter.value);
+    case "after":
+      return new Date(String(val)) > new Date(filter.value);
+    case "before":
+      return new Date(String(val)) < new Date(filter.value);
+    case "is_true":
+      return val === true;
+    case "is_false":
+      return val === false;
+    default:
+      return true;
+  }
+}
+
 function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -146,6 +239,8 @@ export default function Home() {
   const [showToc, setShowToc] = useState(true);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<FilterRule[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | number | null>(null);
 
@@ -263,11 +358,23 @@ export default function Home() {
     return [...tagSet].sort();
   }, [rows]);
 
+  // Detect column names and types from first row
+  const columns = useMemo(() => {
+    if (rows.length === 0) return [];
+    const firstRow = rows[0];
+    const skip = ["embedding", "search_vector"]; // hide noise columns
+    return Object.keys(firstRow)
+      .filter((k) => !skip.includes(k))
+      .map((k) => ({ name: k, type: detectColType(firstRow[k]) }));
+  }, [rows]);
+
   // Filter then sort
   const filteredRows = rows.filter((row) => {
+    // Tag filter
     if (filterTag && !(Array.isArray(row.tags) && (row.tags as string[]).includes(filterTag))) {
       return false;
     }
+    // Search filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const id = String(row.id || "");
@@ -276,6 +383,10 @@ export default function Home() {
       const content = String(row.content || row.summary || row.decision || row.description || "").toLowerCase();
       const tags = Array.isArray(row.tags) ? (row.tags as string[]).join(" ").toLowerCase() : "";
       if (!title.includes(q) && !content.includes(q) && !tags.includes(q)) return false;
+    }
+    // Advanced filters
+    for (const f of filters) {
+      if (f.column && f.operator && !applyFilter(row, f)) return false;
     }
     return true;
   });
@@ -536,7 +647,13 @@ export default function Home() {
             sortedRows.map((row) => (
               <button
                 key={row.id as number}
-                onClick={() => openTab(row)}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey) {
+                    openTab(row);
+                  } else {
+                    setSelectedRow(row);
+                  }
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   const path = `${selectedSchema}.${selectedTable}.id=${row.id}`;
