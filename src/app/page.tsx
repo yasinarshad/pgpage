@@ -299,7 +299,7 @@ export default function Home() {
             supabase.rpc("pg_query_table", {
               p_schema: schema,
               p_table: table,
-              row_limit: 100,
+              row_limit: 1000,
             }).then(({ data }) => {
               if (data) {
                 setRows(data as TableRow[]);
@@ -321,7 +321,7 @@ export default function Home() {
     const { data, error } = await supabase.rpc("pg_query_table", {
       p_schema: schema,
       p_table: table,
-      row_limit: 100,
+      row_limit: 1000,
     });
     if (!error && data) {
       setRows(data as TableRow[]);
