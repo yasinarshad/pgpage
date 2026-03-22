@@ -409,9 +409,18 @@ export default function Home() {
       {/* Sidebar */}
       {showSidebar && (
       <div className="w-56 flex-shrink-0 border-r border-zinc-800 bg-zinc-900 overflow-y-auto">
-        <div className="p-4 border-b border-zinc-800">
-          <h1 className="text-lg font-bold text-zinc-100">pgpage</h1>
-          <p className="text-xs text-zinc-500 mt-1">Postgres Markdown Viewer</p>
+        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-zinc-100">pgpage</h1>
+            <p className="text-xs text-zinc-500 mt-1">Postgres Markdown Viewer</p>
+          </div>
+          <button
+            onClick={() => { supabase.auth.signOut(); setUser(null); }}
+            className="text-xs text-zinc-600 hover:text-zinc-400"
+            title="Sign out"
+          >
+            ↪
+          </button>
         </div>
 
         {/* Schema tabs */}
