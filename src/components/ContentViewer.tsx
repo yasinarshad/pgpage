@@ -171,7 +171,7 @@ export function ContentViewer({
                 <summary className="text-sm font-medium text-zinc-300 cursor-pointer hover:text-zinc-100">
                   {label}
                 </summary>
-                <div className="mt-2 pl-4 border-l-2 border-zinc-700 text-sm text-zinc-400">
+                <div className="mt-2 pl-4 border-l-2 border-zinc-700 text-sm text-zinc-400 pgpage-prose">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {String(selectedRow[key])}
                   </ReactMarkdown>
