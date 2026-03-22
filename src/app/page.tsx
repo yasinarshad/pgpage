@@ -243,6 +243,8 @@ export default function Home() {
   const [showToc, setShowToc] = useState(true);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [isServerSearching, setIsServerSearching] = useState(false);
   const [filters, setFilters] = useState<FilterRule[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
@@ -299,7 +301,7 @@ export default function Home() {
             supabase.rpc("pg_query_table", {
               p_schema: schema,
               p_table: table,
-              row_limit: 1000,
+              row_limit: 100,
             }).then(({ data }) => {
               if (data) {
                 setRows(data as TableRow[]);
@@ -321,7 +323,7 @@ export default function Home() {
     const { data, error } = await supabase.rpc("pg_query_table", {
       p_schema: schema,
       p_table: table,
-      row_limit: 1000,
+      row_limit: 100,
     });
     if (!error && data) {
       setRows(data as TableRow[]);
@@ -338,8 +340,42 @@ export default function Home() {
   useEffect(() => {
     if (!selectedTable) return;
     setSelectedRow(null);
+    setSearchInput("");
+    setSearchQuery("");
+    setFilters([]);
+    setFilterTag(null);
     loadRows(selectedSchema, selectedTable);
   }, [selectedSchema, selectedTable, loadRows]);
+
+  // Debounced server-side search
+  useEffect(() => {
+    if (!selectedTable || !searchInput) {
+      if (!searchInput && searchQuery) setSearchQuery("");
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsServerSearching(true);
+      const { data } = await supabase.rpc("pg_search_table", {
+        p_schema: selectedSchema,
+        p_table: selectedTable,
+        query: searchInput,
+        row_limit: 200,
+      });
+      if (data) {
+        setRows(data as TableRow[]);
+        setSearchQuery(searchInput); // also apply client-side for highlighting
+      }
+      setIsServerSearching(false);
+    }, 400); // 400ms debounce
+    return () => clearTimeout(timer);
+  }, [searchInput, selectedSchema, selectedTable]);
+
+  // Reload original rows when search is cleared
+  useEffect(() => {
+    if (searchInput === "" && selectedTable && !loading) {
+      loadRows(selectedSchema, selectedTable);
+    }
+  }, [searchInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update URL hash when selection changes
   useEffect(() => {
@@ -615,10 +651,10 @@ export default function Home() {
             {/* Search */}
             <input
               type="text"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-800 text-zinc-200 text-xs rounded px-2 py-1.5 border border-zinc-700 outline-none placeholder-zinc-500 mb-2"
+              placeholder={isServerSearching ? "Searching all rows..." : "Search (all rows)..."}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className={`w-full bg-zinc-800 text-zinc-200 text-xs rounded px-2 py-1.5 border outline-none placeholder-zinc-500 mb-2 ${isServerSearching ? "border-blue-500" : "border-zinc-700"}`}
             />
             {/* Tag filter */}
             {allTags.length > 0 && (
