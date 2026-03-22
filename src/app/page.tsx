@@ -167,7 +167,7 @@ export default function Home() {
       const result: Record<string, string[]> = {};
       for (const schema of SCHEMAS) {
         const { data } = await supabase.rpc("pg_tables_list", {
-          schema_name: schema.name,
+          p_schema: schema.name,
         });
         if (data) {
           result[schema.name] = data;
@@ -198,8 +198,8 @@ export default function Home() {
           // Load rows and select the specific row
           if (id) {
             supabase.rpc("pg_query_table", {
-              schema_name: schema,
-              table_name: table,
+              p_schema: schema,
+              p_table: table,
               row_limit: 100,
             }).then(({ data }) => {
               if (data) {
@@ -220,8 +220,8 @@ export default function Home() {
   const loadRows = useCallback(async (schema: SchemaName, table: string) => {
     setLoading(true);
     const { data, error } = await supabase.rpc("pg_query_table", {
-      schema_name: schema,
-      table_name: table,
+      p_schema: schema,
+      p_table: table,
       row_limit: 100,
     });
     if (!error && data) {
