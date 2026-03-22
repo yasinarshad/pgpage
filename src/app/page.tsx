@@ -280,8 +280,28 @@ export default function Home() {
       const { schema, table, id } = parseHash();
       if (schema && SCHEMAS.some((s) => s.name === schema)) {
         setSelectedSchema(schema);
-        if (table) setSelectedTable(table);
-        // id will be restored after rows load
+        if (table) {
+          setSelectedTable(table);
+          // Load rows AND select the specific row if ID is in URL
+          if (id) {
+            const { data } = await supabase.rpc("pg_query_table", {
+              p_schema: schema,
+              p_table: table,
+              row_limit: 100,
+            });
+            if (data) {
+              setRows(data as TableRow[]);
+              const match = (data as TableRow[]).find((r) => String(r.id) === String(id));
+              if (match) {
+                setSelectedRow(match);
+                // Also open as a tab
+                const tabId = match.id as string | number;
+                setOpenTabs([{ schema, table, row: match, id: tabId, title: getTitle(match) }]);
+                setActiveTabId(tabId);
+              }
+            }
+          }
+        }
       }
       setInitialized(true);
     }
