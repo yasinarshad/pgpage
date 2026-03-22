@@ -477,10 +477,32 @@ export default function Home() {
   }, [fkLookups, openTabs]);
 
   // Tab management
-  const openTab = (row: TableRow) => {
-    // If from master feed, navigate to the actual schema/table
+  const openTab = async (row: TableRow) => {
+    // If from master feed, fetch the full row from its original table but STAY in recent activity
     if (selectedTable === "__recent__" && row.schema_name && row.table_name) {
-      navigateFromFeed(String(row.schema_name), String(row.table_name), String(row.id));
+      const schema = String(row.schema_name) as SchemaName;
+      const table = String(row.table_name);
+      const rowId = String(row.id);
+
+      // Fetch full row content from the original table
+      const { data } = await supabase.rpc("pg_get_row", {
+        p_schema: schema,
+        p_table: table,
+        row_id: rowId,
+      });
+
+      const fullRow = (data as TableRow) || row;
+      const id = fullRow.id as string | number;
+      const title = getTitle(fullRow, fkLookups) || getTitle(row, fkLookups);
+      const existing = openTabs.find((t) => t.id === id && t.schema === schema && t.table === table);
+      if (existing) {
+        setActiveTabId(id);
+      } else {
+        setOpenTabs((prev) => [...prev, { schema, table, row: fullRow, id, title }]);
+        setActiveTabId(id);
+      }
+      setSelectedRow(fullRow);
+      setHash(schema, table, id);
       return;
     }
 
