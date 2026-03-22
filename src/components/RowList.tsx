@@ -187,12 +187,12 @@ export function RowList({
                       ? new Date(String(row.date_published || row.created_at)).toLocaleDateString()
                       : `#${row.id}`}
                   </span>
-                  {selectedTable === "__recent__" && row.table_name && (
+                  {selectedTable === "__recent__" && row.table_name ? (
                     <>
                       <span className="text-zinc-700">&middot;</span>
                       <span className="text-zinc-600">{String(row.table_name)}</span>
                     </>
-                  )}
+                  ) : null}
                 </div>
               </button>
             );
