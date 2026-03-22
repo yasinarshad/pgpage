@@ -408,19 +408,10 @@ export default function Home() {
 
       {/* Sidebar */}
       {showSidebar && (
-      <div className="w-56 flex-shrink-0 border-r border-zinc-800 bg-zinc-900 overflow-y-auto">
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-zinc-100">pgpage</h1>
-            <p className="text-xs text-zinc-500 mt-1">Postgres Markdown Viewer</p>
-          </div>
-          <button
-            onClick={() => { supabase.auth.signOut(); setUser(null); }}
-            className="text-xs text-zinc-600 hover:text-zinc-400"
-            title="Sign out"
-          >
-            ↪
-          </button>
+      <div className="w-56 flex-shrink-0 border-r border-zinc-800 bg-zinc-900 overflow-y-auto flex flex-col">
+        <div className="p-4 border-b border-zinc-800">
+          <h1 className="text-lg font-bold text-zinc-100">pgpage</h1>
+          <p className="text-xs text-zinc-500 mt-1">Postgres Markdown Viewer</p>
         </div>
 
         {/* Schema tabs */}
@@ -446,7 +437,7 @@ export default function Home() {
         </div>
 
         {/* Tables list */}
-        <div className="p-2">
+        <div className="p-2 flex-1">
           {(tables[selectedSchema] || [])
             .filter((t) => !t.startsWith("directus_") && t !== "schema_changes")
             .map((table) => (
@@ -462,6 +453,15 @@ export default function Home() {
                 {table}
               </button>
             ))}
+        </div>
+        {/* Logout */}
+        <div className="p-3 border-t border-zinc-800">
+          <button
+            onClick={() => { supabase.auth.signOut(); setUser(null); }}
+            className="w-full text-left text-xs text-zinc-600 hover:text-zinc-400 px-2 py-1"
+          >
+            Sign out ({user?.email?.split("@")[0]})
+          </button>
         </div>
       </div>
       )}
