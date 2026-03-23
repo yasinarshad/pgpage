@@ -445,15 +445,30 @@ export default function Home() {
     },
   }), []);
 
-  // When viewing from Recent Activity, use the tab's schema/table for display
-  const currentTab = openTabs.find((t) => t.id === activeTabId);
-  const viewSchema = (selectedTable === "__recent__" && currentTab) ? currentTab.schema : selectedSchema;
-  const viewTable = (selectedTable === "__recent__" && currentTab) ? currentTab.table : (selectedTable || "");
+  // When viewing from Recent Activity, derive schema/table from the selected row itself
+  const viewSchema = (selectedTable === "__recent__" && selectedRow?.schema_name)
+    ? String(selectedRow.schema_name) as SchemaName
+    : selectedSchema;
+  const viewTable = (selectedTable === "__recent__" && selectedRow?.table_name)
+    ? String(selectedRow.table_name)
+    : (selectedTable || "");
 
-  // When in Recent Activity, regular clicks must go through openTab to fetch full row
+  // When in Recent Activity: show preview instantly, fetch full row in background, no tabs
   const handleRowSelect = useCallback((row: TableRow) => {
-    if (selectedTable === "__recent__") {
-      openTab(row);
+    if (selectedTable === "__recent__" && row.schema_name && row.table_name) {
+      const schema = String(row.schema_name) as SchemaName;
+      const table = String(row.table_name);
+      // Show preview immediately — no waiting
+      setSelectedRow(row);
+      setHash(schema, table, row.id as string | number);
+      // Fetch full row in background, swap in when ready
+      supabase.rpc("pg_get_row", {
+        p_schema: schema,
+        p_table: table,
+        row_id: String(row.id),
+      }).then(({ data }) => {
+        if (data) setSelectedRow(data as TableRow);
+      });
     } else {
       setSelectedRow(row);
     }
@@ -595,13 +610,8 @@ export default function Home() {
 
   // Mobile: select row -> push to content
   const handleSelectRowMobile = (row: TableRow) => {
-    if (selectedTable === "__recent__") {
-      openTab(row);
-      if (!isDesktop) pushTo("content");
-    } else {
-      setSelectedRow(row);
-      if (!isDesktop) pushTo("content");
-    }
+    handleRowSelect(row);
+    if (!isDesktop) pushTo("content");
   };
 
   if (authLoading) {
