@@ -17,7 +17,7 @@ body {
 /* Markdown prose styling for dark mode */
 .pgpage-prose {
   color: #d4d4d8;
-  line-height: 1.75;
+  line-height: 1.25;
   max-width: none;
 }
 
@@ -94,7 +94,7 @@ body {
   list-style-type: decimal;
 }
 
-.pgpage-prose li { margin: 0.1em 0; line-height: 1.15; }
+.pgpage-prose li { margin: 0.1em 0; }
 .pgpage-prose li p { margin: 0; }
 
 .pgpage-prose blockquote {
