@@ -244,7 +244,7 @@ export default function Home() {
 
   // Debounced server-side search
   useEffect(() => {
-    if (!selectedTable || !searchInput) {
+    if (!selectedTable || !searchInput || selectedTable === "__recent__") {
       if (!searchInput && searchQuery) setSearchQuery("");
       return;
     }
@@ -268,14 +268,15 @@ export default function Home() {
 
   // Reload original rows when search is cleared
   useEffect(() => {
-    if (searchInput === "" && selectedTable && !loading) {
+    if (searchInput === "" && selectedTable && selectedTable !== "__recent__" && !loading) {
       loadRows(selectedSchema, selectedTable);
     }
   }, [searchInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update URL hash when selection changes
+  // Update URL hash when selection changes (skip for __recent__ — openTab sets the correct hash)
   useEffect(() => {
     if (!initialized) return;
+    if (selectedTable === "__recent__") return;
     setHash(
       selectedSchema,
       selectedTable || undefined,
@@ -460,6 +461,15 @@ export default function Home() {
 
   // Refresh current table
   const handleRefresh = () => {
+    if (selectedTable === "__recent__") {
+      setLoading(true);
+      supabase.rpc("pg_master_feed", { row_limit: 100 })
+        .then(({ data }) => {
+          if (data) setRows(data as TableRow[]);
+          setLoading(false);
+        });
+      return;
+    }
     if (selectedTable) {
       loadRows(selectedSchema, selectedTable);
     }
@@ -563,8 +573,11 @@ export default function Home() {
   const switchTab = (tab: Tab) => {
     setActiveTabId(tab.id);
     setSelectedRow(tab.row);
-    setSelectedSchema(tab.schema);
-    setSelectedTable(tab.table);
+    // Don't navigate away from Recent Activity — viewSchema/viewTable handle display
+    if (selectedTable !== "__recent__") {
+      setSelectedSchema(tab.schema);
+      setSelectedTable(tab.table);
+    }
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
