@@ -75,6 +75,7 @@ body {
 
 .pgpage-prose ul ul {
   list-style-type: circle;
+  margin: 0;
 }
 
 .pgpage-prose ul ul ul {
