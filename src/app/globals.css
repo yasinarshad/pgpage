@@ -87,7 +87,7 @@ body {
   list-style-type: decimal;
 }
 
-.pgpage-prose li { margin: 0.15em 0; line-height: 1.5; }
+.pgpage-prose li { margin: 0.1em 0; line-height: 1.15; }
 .pgpage-prose li p { margin: 0; }
 
 .pgpage-prose blockquote {
