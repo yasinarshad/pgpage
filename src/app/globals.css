@@ -73,9 +73,15 @@ body {
   list-style-type: disc;
 }
 
+.pgpage-prose ul ul,
+.pgpage-prose ul ol,
+.pgpage-prose ol ul,
+.pgpage-prose ol ol {
+  margin: 0;
+}
+
 .pgpage-prose ul ul {
   list-style-type: circle;
-  margin: 0;
 }
 
 .pgpage-prose ul ul ul {
