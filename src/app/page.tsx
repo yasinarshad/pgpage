@@ -461,13 +461,13 @@ export default function Home() {
       // Show preview immediately — no waiting
       setSelectedRow(row);
       setHash(schema, table, row.id as string | number);
-      // Fetch full row in background, swap in when ready
+      // Fetch full row in background, swap in when ready (preserve source fields for viewSchema/viewTable)
       supabase.rpc("pg_get_row", {
         p_schema: schema,
         p_table: table,
         row_id: String(row.id),
       }).then(({ data }) => {
-        if (data) setSelectedRow(data as TableRow);
+        if (data) setSelectedRow({ ...(data as TableRow), schema_name: schema, table_name: table });
       });
     } else {
       setSelectedRow(row);
