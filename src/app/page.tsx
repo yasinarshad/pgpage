@@ -649,7 +649,7 @@ export default function Home() {
                 user={user}
                 setUser={setUser}
                 tables={tables}
-                selectedSchema={viewSchema}
+                selectedSchema={selectedSchema}
                 setSelectedSchema={setSelectedSchema}
                 selectedTable={selectedTable}
                 setSelectedTable={handleSelectTableMobile}
@@ -715,7 +715,7 @@ export default function Home() {
                 user={user}
                 setUser={setUser}
                 tables={tables}
-                selectedSchema={viewSchema}
+                selectedSchema={selectedSchema}
                 setSelectedSchema={setSelectedSchema}
                 selectedTable={selectedTable}
                 setSelectedTable={handleSelectTableMobile}
@@ -735,7 +735,7 @@ export default function Home() {
               />
               <div className="flex-1 overflow-y-auto">
                 <RowList
-                  selectedSchema={viewSchema}
+                  selectedSchema={selectedSchema}
                   selectedTable={selectedTable}
                   rows={rows}
                   sortedRows={sortedRows}
@@ -867,7 +867,7 @@ export default function Home() {
                 user={user}
                 setUser={setUser}
                 tables={tables}
-                selectedSchema={viewSchema}
+                selectedSchema={selectedSchema}
                 setSelectedSchema={setSelectedSchema}
                 selectedTable={selectedTable}
                 setSelectedTable={(table) => {
@@ -933,7 +933,7 @@ export default function Home() {
           {/* Row list */}
           {selectedTable && (
             <RowList
-              selectedSchema={viewSchema}
+              selectedSchema={selectedSchema}
               selectedTable={selectedTable}
               rows={rows}
               sortedRows={sortedRows}
@@ -978,7 +978,7 @@ export default function Home() {
               {selectedRow ? (
                 <ContentViewer
                   selectedRow={selectedRow}
-                  selectedSchema={viewSchema}
+                  selectedSchema={selectedSchema}
                   selectedTable={viewTable}
                   fkLookups={fkLookups}
                   headingComponents={headingComponents}
@@ -1062,7 +1062,7 @@ export default function Home() {
           user={user}
           setUser={setUser}
           tables={tables}
-          selectedSchema={viewSchema}
+          selectedSchema={selectedSchema}
           setSelectedSchema={setSelectedSchema}
           selectedTable={selectedTable}
           setSelectedTable={setSelectedTable}
@@ -1074,7 +1074,7 @@ export default function Home() {
       {/* Row list */}
       {showRowList && selectedTable && (
         <RowList
-          selectedSchema={viewSchema}
+          selectedSchema={selectedSchema}
           selectedTable={selectedTable}
           rows={rows}
           sortedRows={sortedRows}
