@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { supabase, SCHEMAS, type SchemaName } from "@/lib/supabase";
+import { supabase, SCHEMAS, loadTableConfig, type SchemaName, type TableConfig } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import type { TableRow, Tab, FilterRule } from "@/lib/types";
 import {
@@ -54,6 +54,8 @@ export default function Home() {
   // Keyboard navigation
   const [selectedRowIndex, setSelectedRowIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Table config (date column overrides per table)
+  const [tableConfig, setTableConfig] = useState<TableConfig>({});
 
   // Mobile state
   const { mobileView, pushTo, goBack, isPhone, isTablet, isDesktop } = useMobileView();
@@ -133,6 +135,7 @@ export default function Home() {
       setInitialized(true);
     }
     loadTables();
+    loadTableConfig().then(setTableConfig);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for hash changes
@@ -407,6 +410,13 @@ export default function Home() {
     return true;
   });
 
+  // Resolve the configured date column for the current table
+  const getDateValue = (row: TableRow) => {
+    const key = `${selectedSchema}.${selectedTable}`;
+    const col = tableConfig[key]?.dateColumn;
+    return col && row[col] ? String(row[col]) : String(row.created_at || row.id || 0);
+  };
+
   const sortedRows = [...filteredRows].sort((a, b) => {
     if (sortBy === "title") {
       return String(a.title || "").localeCompare(String(b.title || ""));
@@ -416,8 +426,8 @@ export default function Home() {
       const modB = String(b.updated_at || b.created_at || 0);
       return modB.localeCompare(modA);
     }
-    const dateA = String(a.created_at || a.id || 0);
-    const dateB = String(b.created_at || b.id || 0);
+    const dateA = getDateValue(a);
+    const dateB = getDateValue(b);
     return sortBy === "newest" ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
   });
 
@@ -766,6 +776,7 @@ export default function Home() {
                   loadingMore={loadingMore}
                   onLoadMore={handleLoadMore}
                   isMobileFullScreen
+                  tableConfig={tableConfig}
                 />
               </div>
             </div>
@@ -963,6 +974,7 @@ export default function Home() {
               hasMore={hasMore}
               loadingMore={loadingMore}
               onLoadMore={handleLoadMore}
+              tableConfig={tableConfig}
             />
           )}
 
@@ -1104,6 +1116,7 @@ export default function Home() {
           hasMore={hasMore}
           loadingMore={loadingMore}
           onLoadMore={handleLoadMore}
+          tableConfig={tableConfig}
         />
       )}
 

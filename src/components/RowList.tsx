@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import type { TableRow, FilterRule, ColType } from "@/lib/types";
-import type { SchemaName } from "@/lib/supabase";
+import type { SchemaName, TableConfig } from "@/lib/supabase";
 import { getTitle, getCreatorName } from "@/lib/helpers";
 import { FilterBuilder } from "./FilterBuilder";
 
@@ -39,6 +39,7 @@ type RowListProps = {
   loadingMore: boolean;
   onLoadMore: () => void;
   isMobileFullScreen?: boolean;
+  tableConfig?: TableConfig;
 };
 
 function LoadingSkeleton() {
@@ -64,6 +65,7 @@ export function RowList({
   selectedRowIndex,
   hasMore, loadingMore, onLoadMore,
   isMobileFullScreen,
+  tableConfig,
 }: RowListProps) {
   return (
     <div className={`${isMobileFullScreen ? "w-full" : "w-72 flex-shrink-0"} border-r border-zinc-800 bg-zinc-925 overflow-y-auto`}>
@@ -183,9 +185,14 @@ export function RowList({
                     </>
                   )}
                   <span>
-                    {(row.date_published || row.created_at)
-                      ? new Date(String(row.date_published || row.created_at)).toLocaleDateString()
-                      : `#${row.id}`}
+                    {(() => {
+                      const cfgKey = `${selectedSchema}.${selectedTable}`;
+                      const cfgCol = tableConfig?.[cfgKey]?.dateColumn;
+                      const dateVal = cfgCol && row[cfgCol] ? row[cfgCol] : (row.date_published || row.created_at);
+                      return dateVal
+                        ? new Date(String(dateVal)).toLocaleDateString()
+                        : `#${row.id}`;
+                    })()}
                   </span>
                   {selectedTable === "__recent__" && row.table_name ? (
                     <>
