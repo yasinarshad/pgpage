@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import type { TableRow, FilterRule, ColType } from "@/lib/types";
-import type { SchemaName, TableConfig } from "@/lib/supabase";
+import type { SchemaName } from "@/lib/supabase";
 import { getTitle, getCreatorName } from "@/lib/helpers";
 import { FilterBuilder } from "./FilterBuilder";
 
@@ -39,7 +39,10 @@ type RowListProps = {
   loadingMore: boolean;
   onLoadMore: () => void;
   isMobileFullScreen?: boolean;
-  tableConfig?: TableConfig;
+  // Date column picker
+  dateColumn: string;
+  availableDateColumns: string[];
+  onDateColumnChange: (col: string) => void;
 };
 
 function LoadingSkeleton() {
@@ -65,7 +68,7 @@ export function RowList({
   selectedRowIndex,
   hasMore, loadingMore, onLoadMore,
   isMobileFullScreen,
-  tableConfig,
+  dateColumn, availableDateColumns, onDateColumnChange,
 }: RowListProps) {
   return (
     <div className={`${isMobileFullScreen ? "w-full" : "w-72 flex-shrink-0"} border-r border-zinc-800 bg-zinc-925 overflow-y-auto`}>
@@ -97,6 +100,21 @@ export function RowList({
             </select>
           </div>
         </div>
+        {/* Date column picker — only show if 2+ date columns detected */}
+        {availableDateColumns.length >= 2 && (
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-zinc-500 text-[10px]">Date:</span>
+            <select
+              value={dateColumn}
+              onChange={(e) => onDateColumnChange(e.target.value)}
+              className="flex-1 bg-zinc-800 text-zinc-400 text-[10px] rounded px-1.5 py-0.5 border border-zinc-700 outline-none"
+            >
+              {availableDateColumns.map((col) => (
+                <option key={col} value={col}>{col}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {/* Search */}
         <input
           ref={searchInputRef}
@@ -186,9 +204,7 @@ export function RowList({
                   )}
                   <span>
                     {(() => {
-                      const cfgKey = `${selectedSchema}.${selectedTable}`;
-                      const cfgCol = tableConfig?.[cfgKey]?.dateColumn;
-                      const dateVal = cfgCol && row[cfgCol] ? row[cfgCol] : (row.date_published || row.created_at);
+                      const dateVal = row[dateColumn] ?? row.created_at;
                       return dateVal
                         ? new Date(String(dateVal)).toLocaleDateString()
                         : `#${row.id}`;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { supabase, SCHEMAS, loadTableConfig, type SchemaName, type TableConfig } from "@/lib/supabase";
+import { supabase, SCHEMAS, type SchemaName } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import type { TableRow, Tab, FilterRule } from "@/lib/types";
 import {
@@ -54,8 +54,8 @@ export default function Home() {
   // Keyboard navigation
   const [selectedRowIndex, setSelectedRowIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  // Table config (date column overrides per table)
-  const [tableConfig, setTableConfig] = useState<TableConfig>({});
+  // Date column picker state
+  const [dateColumn, setDateColumn] = useState<string>("created_at");
 
   // Mobile state
   const { mobileView, pushTo, goBack, isPhone, isTablet, isDesktop } = useMobileView();
@@ -135,7 +135,6 @@ export default function Home() {
       setInitialized(true);
     }
     loadTables();
-    loadTableConfig().then(setTableConfig);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for hash changes
@@ -390,6 +389,45 @@ export default function Home() {
     return result;
   }, [rows]);
 
+  // Detect available date columns from loaded rows
+  const availableDateColumns = useMemo(() => {
+    if (rows.length === 0) return [];
+    const firstRow = rows[0];
+    const DATE_PATTERNS = /date|_at$|time/i;
+    return Object.keys(firstRow).filter((k) => {
+      if (!DATE_PATTERNS.test(k)) return false;
+      // Check that at least one row has a parseable date value
+      const sample = rows.find((r) => r[k] != null);
+      if (!sample) return false;
+      const d = new Date(String(sample[k]));
+      return !isNaN(d.getTime());
+    });
+  }, [rows]);
+
+  // Resolve dateColumn when table changes or rows load: localStorage -> fallback to created_at
+  useEffect(() => {
+    if (!selectedTable) return;
+    const key = `pgpage:dateCol:${selectedSchema}.${selectedTable}`;
+    const stored = localStorage.getItem(key);
+    if (stored && availableDateColumns.includes(stored)) {
+      setDateColumn(stored);
+    } else if (availableDateColumns.includes("created_at")) {
+      setDateColumn("created_at");
+    } else if (availableDateColumns.length > 0) {
+      setDateColumn(availableDateColumns[0]);
+    } else {
+      setDateColumn("created_at");
+    }
+  }, [selectedSchema, selectedTable, availableDateColumns]);
+
+  // Handle date column change from picker — persist to localStorage
+  const handleDateColumnChange = useCallback((col: string) => {
+    if (!selectedTable) return;
+    setDateColumn(col);
+    const key = `pgpage:dateCol:${selectedSchema}.${selectedTable}`;
+    localStorage.setItem(key, col);
+  }, [selectedSchema, selectedTable]);
+
   // Filter then sort
   const filteredRows = rows.filter((row) => {
     if (filterTag && !(Array.isArray(row.tags) && (row.tags as string[]).includes(filterTag))) {
@@ -410,11 +448,9 @@ export default function Home() {
     return true;
   });
 
-  // Resolve the configured date column for the current table
+  // Resolve the date value using the selected dateColumn
   const getDateValue = (row: TableRow) => {
-    const key = `${selectedSchema}.${selectedTable}`;
-    const col = tableConfig[key]?.dateColumn;
-    return col && row[col] ? String(row[col]) : String(row.created_at || row.id || 0);
+    return row[dateColumn] ? String(row[dateColumn]) : String(row.created_at || row.id || 0);
   };
 
   const sortedRows = [...filteredRows].sort((a, b) => {
@@ -776,7 +812,9 @@ export default function Home() {
                   loadingMore={loadingMore}
                   onLoadMore={handleLoadMore}
                   isMobileFullScreen
-                  tableConfig={tableConfig}
+                  dateColumn={dateColumn}
+                  availableDateColumns={availableDateColumns}
+                  onDateColumnChange={handleDateColumnChange}
                 />
               </div>
             </div>
@@ -974,7 +1012,9 @@ export default function Home() {
               hasMore={hasMore}
               loadingMore={loadingMore}
               onLoadMore={handleLoadMore}
-              tableConfig={tableConfig}
+              dateColumn={dateColumn}
+              availableDateColumns={availableDateColumns}
+              onDateColumnChange={handleDateColumnChange}
             />
           )}
 
@@ -1116,7 +1156,9 @@ export default function Home() {
           hasMore={hasMore}
           loadingMore={loadingMore}
           onLoadMore={handleLoadMore}
-          tableConfig={tableConfig}
+          dateColumn={dateColumn}
+          availableDateColumns={availableDateColumns}
+          onDateColumnChange={handleDateColumnChange}
         />
       )}
 
