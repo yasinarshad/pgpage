@@ -8,12 +8,12 @@ export type Workspace = {
   schemaColors: Record<string, string>;
 };
 
-export const WORKSPACES: Workspace[] = [
+const ALL_WORKSPACES: Workspace[] = [
   {
     id: "yasin-brain",
     name: "Yasin Brain",
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
     schemas: [
       { name: "memdb", label: "Memory DB" },
       { name: "sessiondb", label: "Sessions" },
@@ -31,8 +31,8 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "leanscale-brain",
     name: "LeanScale Brain",
-    supabaseUrl: process.env.NEXT_PUBLIC_LEANSCALE_SUPABASE_URL!,
-    anonKey: process.env.NEXT_PUBLIC_LEANSCALE_SUPABASE_ANON_KEY!,
+    supabaseUrl: process.env.NEXT_PUBLIC_LEANSCALE_SUPABASE_URL || "",
+    anonKey: process.env.NEXT_PUBLIC_LEANSCALE_SUPABASE_ANON_KEY || "",
     schemas: [
       { name: "company_context", label: "Company Context" },
       { name: "content", label: "Content" },
@@ -52,6 +52,11 @@ export const WORKSPACES: Workspace[] = [
     },
   },
 ];
+
+// Only include workspaces that have valid env vars configured
+export const WORKSPACES = ALL_WORKSPACES.filter(
+  (w) => w.supabaseUrl && w.anonKey
+);
 
 export function getWorkspace(id: string): Workspace | undefined {
   return WORKSPACES.find((w) => w.id === id);
