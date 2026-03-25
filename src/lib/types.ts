@@ -1,9 +1,7 @@
-import type { SchemaName } from "./supabase";
-
 export type TableRow = Record<string, unknown>;
 
 export type Tab = {
-  schema: SchemaName;
+  schema: string;
   table: string;
   row: TableRow;
   id: string | number;

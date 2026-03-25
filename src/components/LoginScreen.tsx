@@ -1,10 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
+import type { Workspace } from "@/lib/workspaces";
 import type { User } from "@supabase/supabase-js";
 
-export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
+export function LoginScreen({
+  onLogin,
+  workspace,
+}: {
+  onLogin: (user: User) => void;
+  workspace: Workspace;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -14,7 +21,8 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const client = getSupabaseClient(workspace.supabaseUrl, workspace.anonKey);
+    const { data, error: authError } = await client.auth.signInWithPassword({ email, password });
     if (authError) {
       setError(authError.message);
       setLoading(false);
@@ -27,7 +35,7 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
     <div className="flex items-center justify-center h-screen bg-zinc-950">
       <form onSubmit={handleSubmit} className="w-80 p-6 bg-zinc-900 rounded-lg border border-zinc-800">
         <h1 className="text-xl font-bold text-zinc-100 mb-1">pgpage</h1>
-        <p className="text-xs text-zinc-500 mb-6">Postgres Markdown Viewer</p>
+        <p className="text-xs text-zinc-500 mb-6">{workspace.name}</p>
         {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
         <input
           type="email" placeholder="Email" value={email}

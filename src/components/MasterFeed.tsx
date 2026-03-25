@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type FeedEntry = {
   id: string;
@@ -14,17 +14,14 @@ type FeedEntry = {
   table_name: string;
 };
 
-const SCHEMA_COLORS: Record<string, string> = {
-  memdb: "bg-blue-900/40 text-blue-300",
-  sessiondb: "bg-green-900/40 text-green-300",
-  worlddb: "bg-purple-900/40 text-purple-300",
-  yasin_info: "bg-amber-900/40 text-amber-300",
-};
-
 export function MasterFeed({
   onNavigate,
+  supabase,
+  schemaColors,
 }: {
   onNavigate: (schema: string, table: string, id: string) => void;
+  supabase: SupabaseClient;
+  schemaColors: Record<string, string>;
 }) {
   const [entries, setEntries] = useState<FeedEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +33,7 @@ export function MasterFeed({
       setLoading(false);
     }
     load();
-  }, []);
+  }, [supabase]);
 
   const refresh = async () => {
     setLoading(true);
@@ -86,7 +83,7 @@ export function MasterFeed({
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${SCHEMA_COLORS[entry.schema_name] || "bg-zinc-800 text-zinc-400"}`}>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${schemaColors[entry.schema_name] || "bg-zinc-800 text-zinc-400"}`}>
                     {entry.table_name}
                   </span>
                   <span className="text-[10px] text-zinc-600">

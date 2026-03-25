@@ -1,13 +1,11 @@
 "use client";
 
-import { useRef } from "react";
 import type { TableRow, FilterRule, ColType } from "@/lib/types";
-import type { SchemaName } from "@/lib/supabase";
 import { getTitle, getCreatorName } from "@/lib/helpers";
 import { FilterBuilder } from "./FilterBuilder";
 
 type RowListProps = {
-  selectedSchema: SchemaName;
+  selectedSchema: string;
   selectedTable: string;
   rows: TableRow[];
   sortedRows: TableRow[];

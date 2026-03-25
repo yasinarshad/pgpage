@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { supabase, SCHEMAS, type SchemaName } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
+import { WORKSPACES, DEFAULT_WORKSPACE, getWorkspace } from "@/lib/workspaces";
+import type { Workspace } from "@/lib/workspaces";
 import type { User } from "@supabase/supabase-js";
 import type { TableRow, Tab, FilterRule } from "@/lib/types";
 import {
@@ -22,11 +24,34 @@ import { HelpButton } from "@/components/HelpOverlay";
 import { BottomNav } from "@/components/BottomNav";
 import { MobileBackHeader } from "@/components/MobileBackHeader";
 
+function resolveInitialWorkspace(): Workspace {
+  // 1. Check hash for workspace
+  if (typeof window !== "undefined") {
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+      const firstSeg = hash.split("/")[0];
+      const wsById = getWorkspace(firstSeg);
+      if (wsById) return wsById;
+      // Check if first segment is a schema name (backwards compat)
+      const wsBySchema = WORKSPACES.find((w) => w.schemas.some((s) => s.name === firstSeg));
+      if (wsBySchema) return wsBySchema;
+    }
+    // 2. Check localStorage
+    const stored = localStorage.getItem("pgpage:activeWorkspace");
+    if (stored) {
+      const ws = getWorkspace(stored);
+      if (ws) return ws;
+    }
+  }
+  return DEFAULT_WORKSPACE;
+}
+
 export default function Home() {
+  const [activeWorkspace, setActiveWorkspace] = useState<Workspace>(DEFAULT_WORKSPACE);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tables, setTables] = useState<Record<string, string[]>>({});
-  const [selectedSchema, setSelectedSchema] = useState<SchemaName>("memdb");
+  const [selectedSchema, setSelectedSchema] = useState<string>(DEFAULT_WORKSPACE.schemas[0].name);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [rows, setRows] = useState<TableRow[]>([]);
   const [selectedRow, setSelectedRow] = useState<TableRow | null>(null);
@@ -62,8 +87,50 @@ export default function Home() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
 
+  // Derive supabase client from active workspace
+  const supabase = useMemo(
+    () => getSupabaseClient(activeWorkspace.supabaseUrl, activeWorkspace.anonKey),
+    [activeWorkspace]
+  );
+
+  // Initialize workspace from hash/localStorage on mount
+  useEffect(() => {
+    const ws = resolveInitialWorkspace();
+    setActiveWorkspace(ws);
+    setSelectedSchema(ws.schemas[0].name);
+  }, []);
+
+  // Persist active workspace to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("pgpage:activeWorkspace", activeWorkspace.id);
+    }
+  }, [activeWorkspace]);
+
+  // Workspace switch handler
+  const handleSwitchWorkspace = useCallback((ws: Workspace) => {
+    setActiveWorkspace(ws);
+    // Reset all state
+    setTables({});
+    setSelectedSchema(ws.schemas[0].name);
+    setSelectedTable(null);
+    setSelectedRow(null);
+    setRows([]);
+    setOpenTabs([]);
+    setActiveTabId(null);
+    setFkLookups({});
+    setFilters([]);
+    setFilterTag(null);
+    setSearchInput("");
+    setSearchQuery("");
+    setSelectedRowIndex(-1);
+    setInitialized(false);
+    // Auth will be checked by the auth useEffect since supabase client changes
+  }, []);
+
   // Check existing auth session
   useEffect(() => {
+    setAuthLoading(true);
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthLoading(false);
@@ -72,14 +139,23 @@ export default function Home() {
       setUser(session?.user ?? null);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [supabase]);
 
   // On mount: restore hash URL immediately (parallel with table loading)
   useEffect(() => {
-    const { schema, table, id } = parseHash();
+    const { workspaceId, schema, table, id } = parseHash();
+
+    // If hash specifies a workspace, switch to it
+    if (workspaceId) {
+      const ws = getWorkspace(workspaceId);
+      if (ws && ws.id !== activeWorkspace.id) {
+        setActiveWorkspace(ws);
+        setSelectedSchema(ws.schemas[0].name);
+      }
+    }
 
     // If we have a direct link, fetch the row IMMEDIATELY — don't wait for tables
-    if (schema && table && id && SCHEMAS.some((s) => s.name === schema)) {
+    if (schema && table && id && activeWorkspace.schemas.some((s) => s.name === schema)) {
       setSelectedSchema(schema);
       setSelectedTable(table);
       supabase.rpc("pg_query_table", {
@@ -105,7 +181,7 @@ export default function Home() {
       // Also load FK lookups for this table
       supabase.rpc("pg_resolve_fks", { p_schema: schema, p_table: table })
         .then(({ data }) => { if (data) setFkLookups(data as Record<string, Record<string, string>>); });
-    } else if (schema && SCHEMAS.some((s) => s.name === schema)) {
+    } else if (schema && activeWorkspace.schemas.some((s) => s.name === schema)) {
       setSelectedSchema(schema);
       if (table) setSelectedTable(table);
     }
@@ -116,7 +192,7 @@ export default function Home() {
       let totalTables = 0;
       let schemaCount = 0;
       // Fetch all schemas in parallel
-      const promises = SCHEMAS.map((s) =>
+      const promises = activeWorkspace.schemas.map((s) =>
         supabase.rpc("pg_tables_list", { p_schema: s.name }).then(({ data }) => ({ name: s.name, data }))
       );
       const results = await Promise.all(promises);
@@ -135,13 +211,20 @@ export default function Home() {
       setInitialized(true);
     }
     loadTables();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for hash changes
   useEffect(() => {
     function handleHashChange() {
-      const { schema, table, id } = parseHash();
-      if (schema && SCHEMAS.some((s) => s.name === schema)) {
+      const { workspaceId, schema, table, id } = parseHash();
+      if (workspaceId) {
+        const ws = getWorkspace(workspaceId);
+        if (ws && ws.id !== activeWorkspace.id) {
+          handleSwitchWorkspace(ws);
+          return;
+        }
+      }
+      if (schema && activeWorkspace.schemas.some((s) => s.name === schema)) {
         setSelectedSchema(schema);
         if (table) {
           setSelectedTable(table);
@@ -165,10 +248,10 @@ export default function Home() {
     }
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+  }, [activeWorkspace, supabase, handleSwitchWorkspace]);
 
   // Load rows when table is selected
-  const loadRows = useCallback(async (schema: SchemaName, table: string) => {
+  const loadRows = useCallback(async (schema: string, table: string) => {
     setLoading(true);
     setRowOffset(0);
     const { data, error } = await supabase.rpc("pg_query_table", {
@@ -187,7 +270,7 @@ export default function Home() {
       }
     }
     setLoading(false);
-  }, []);
+  }, [supabase]);
 
   // Load more rows (pagination)
   const handleLoadMore = useCallback(async () => {
@@ -216,7 +299,7 @@ export default function Home() {
       setRowOffset((prev) => prev + newRows.length);
     }
     setLoadingMore(false);
-  }, [selectedSchema, selectedTable, rowOffset, loadingMore]);
+  }, [selectedSchema, selectedTable, rowOffset, loadingMore, supabase]);
 
   useEffect(() => {
     if (!selectedTable) return;
@@ -242,7 +325,7 @@ export default function Home() {
     loadRows(selectedSchema, selectedTable);
     supabase.rpc("pg_resolve_fks", { p_schema: selectedSchema, p_table: selectedTable })
       .then(({ data }) => { if (data) setFkLookups(data as Record<string, Record<string, string>>); });
-  }, [selectedSchema, selectedTable, loadRows]);
+  }, [selectedSchema, selectedTable, loadRows, supabase]);
 
   // Debounced server-side search
   useEffect(() => {
@@ -266,7 +349,7 @@ export default function Home() {
       setIsServerSearching(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchInput, selectedSchema, selectedTable]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchInput, selectedSchema, selectedTable, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reload original rows when search is cleared
   useEffect(() => {
@@ -280,11 +363,12 @@ export default function Home() {
     if (!initialized) return;
     if (selectedTable === "__recent__") return;
     setHash(
+      activeWorkspace.id,
       selectedSchema,
       selectedTable || undefined,
       selectedRow?.id != null ? (selectedRow.id as number) : undefined
     );
-  }, [selectedSchema, selectedTable, selectedRow, initialized]);
+  }, [selectedSchema, selectedTable, selectedRow, initialized, activeWorkspace]);
 
   // Keyboard shortcuts: Cmd+K, Escape, Up/Down arrows
   useEffect(() => {
@@ -493,7 +577,7 @@ export default function Home() {
 
   // When viewing from Recent Activity, derive schema/table from the selected row itself
   const viewSchema = (selectedTable === "__recent__" && selectedRow?.schema_name)
-    ? String(selectedRow.schema_name) as SchemaName
+    ? String(selectedRow.schema_name)
     : selectedSchema;
   const viewTable = (selectedTable === "__recent__" && selectedRow?.table_name)
     ? String(selectedRow.table_name)
@@ -502,11 +586,11 @@ export default function Home() {
   // When in Recent Activity: show preview instantly, fetch full row in background, no tabs
   const handleRowSelect = useCallback((row: TableRow) => {
     if (selectedTable === "__recent__" && row.schema_name && row.table_name) {
-      const schema = String(row.schema_name) as SchemaName;
+      const schema = String(row.schema_name);
       const table = String(row.table_name);
       // Show preview immediately — no waiting
       setSelectedRow(row);
-      setHash(schema, table, row.id as string | number);
+      setHash(activeWorkspace.id, schema, table, row.id as string | number);
       // Fetch full row in background, swap in when ready (preserve source fields for viewSchema/viewTable)
       supabase.rpc("pg_get_row", {
         p_schema: schema,
@@ -518,7 +602,7 @@ export default function Home() {
     } else {
       setSelectedRow(row);
     }
-  }, [selectedTable]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTable, supabase, activeWorkspace]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh current table
   const handleRefresh = () => {
@@ -538,8 +622,7 @@ export default function Home() {
 
   // Navigate from master feed
   const navigateFromFeed = useCallback(async (schema: string, table: string, id: string) => {
-    const s = schema as SchemaName;
-    setSelectedSchema(s);
+    setSelectedSchema(schema);
     setSelectedTable(table);
     // Load rows and select the specific one
     const { data } = await supabase.rpc("pg_query_table", {
@@ -554,20 +637,20 @@ export default function Home() {
         setSelectedRow(match);
         const tabId = match.id as string | number;
         const title = getTitle(match, fkLookups);
-        if (!openTabs.find((t) => t.id === tabId && t.schema === s && t.table === table)) {
-          setOpenTabs((prev) => [...prev, { schema: s, table, row: match, id: tabId, title }]);
+        if (!openTabs.find((t) => t.id === tabId && t.schema === schema && t.table === table)) {
+          setOpenTabs((prev) => [...prev, { schema, table, row: match, id: tabId, title }]);
         }
         setActiveTabId(tabId);
-        setHash(schema, table, tabId);
+        setHash(activeWorkspace.id, schema, table, tabId);
       }
     }
-  }, [fkLookups, openTabs]);
+  }, [fkLookups, openTabs, supabase, activeWorkspace]);
 
   // Tab management
   const openTab = async (row: TableRow) => {
     // If from master feed, fetch the full row from its original table but STAY in recent activity
     if (selectedTable === "__recent__" && row.schema_name && row.table_name) {
-      const schema = String(row.schema_name) as SchemaName;
+      const schema = String(row.schema_name);
       const table = String(row.table_name);
       const rowId = String(row.id);
 
@@ -589,7 +672,7 @@ export default function Home() {
         setActiveTabId(id);
       }
       setSelectedRow(fullRow);
-      setHash(schema, table, id);
+      setHash(activeWorkspace.id, schema, table, id);
       return;
     }
 
@@ -660,6 +743,27 @@ export default function Home() {
     if (!isDesktop) pushTo("content");
   };
 
+  // Shared MasterFeed props
+  const masterFeedElement = activeWorkspace.hasMasterFeed ? (
+    <MasterFeed onNavigate={navigateFromFeed} supabase={supabase} schemaColors={activeWorkspace.schemaColors} />
+  ) : (
+    <EmptyState stats={dbStats} />
+  );
+
+  // Shared sidebar props
+  const sidebarProps = {
+    user: user!,
+    setUser,
+    tables,
+    selectedSchema,
+    setSelectedSchema,
+    selectedTable,
+    setSelectedRow,
+    setRows,
+    activeWorkspace,
+    onSwitchWorkspace: handleSwitchWorkspace,
+  };
+
   if (authLoading) {
     // Loading skeleton for auth check
     return (
@@ -676,7 +780,7 @@ export default function Home() {
   }
 
   if (!user) {
-    return <LoginScreen onLogin={setUser} />;
+    return <LoginScreen onLogin={setUser} workspace={activeWorkspace} />;
   }
 
   // ----- Mobile phone layout: single panel at a time -----
@@ -692,15 +796,8 @@ export default function Home() {
             />
             <div className="absolute inset-y-0 left-0 w-72 bg-zinc-900 border-r border-zinc-800 z-50 shadow-2xl overflow-y-auto">
               <Sidebar
-                user={user}
-                setUser={setUser}
-                tables={tables}
-                selectedSchema={selectedSchema}
-                setSelectedSchema={setSelectedSchema}
-                selectedTable={selectedTable}
+                {...sidebarProps}
                 setSelectedTable={handleSelectTableMobile}
-                setSelectedRow={setSelectedRow}
-                setRows={setRows}
               />
             </div>
           </div>
@@ -758,15 +855,8 @@ export default function Home() {
           {mobileView === "sidebar" && (
             <div className="h-full flex flex-col">
               <Sidebar
-                user={user}
-                setUser={setUser}
-                tables={tables}
-                selectedSchema={selectedSchema}
-                setSelectedSchema={setSelectedSchema}
-                selectedTable={selectedTable}
+                {...sidebarProps}
                 setSelectedTable={handleSelectTableMobile}
-                setSelectedRow={setSelectedRow}
-                setRows={setRows}
                 isMobileFullScreen
               />
             </div>
@@ -847,6 +937,7 @@ export default function Home() {
                     selectedTable={viewTable}
                     fkLookups={fkLookups}
                     headingComponents={headingComponents}
+                    workspaceId={activeWorkspace.id}
                     onFilterClick={(column, value) => {
                       if (column === "tags") {
                         setFilterTag(value);
@@ -859,7 +950,7 @@ export default function Home() {
                     isMobile
                   />
                 ) : (
-                  <MasterFeed onNavigate={navigateFromFeed} />
+                  masterFeedElement
                 )}
               </div>
             </div>
@@ -913,18 +1004,11 @@ export default function Home() {
             />
             <div className="absolute inset-y-0 left-0 w-72 bg-zinc-900 border-r border-zinc-800 z-50 shadow-2xl overflow-y-auto">
               <Sidebar
-                user={user}
-                setUser={setUser}
-                tables={tables}
-                selectedSchema={selectedSchema}
-                setSelectedSchema={setSelectedSchema}
-                selectedTable={selectedTable}
+                {...sidebarProps}
                 setSelectedTable={(table) => {
                   setSelectedTable(table);
                   setMobileSidebarOpen(false);
                 }}
-                setSelectedRow={setSelectedRow}
-                setRows={setRows}
               />
             </div>
           </div>
@@ -1034,6 +1118,7 @@ export default function Home() {
                   selectedTable={viewTable}
                   fkLookups={fkLookups}
                   headingComponents={headingComponents}
+                  workspaceId={activeWorkspace.id}
                   onFilterClick={(column, value) => {
                     if (column === "tags") {
                       setFilterTag(value);
@@ -1044,7 +1129,7 @@ export default function Home() {
                   }}
                 />
               ) : (
-                <MasterFeed onNavigate={navigateFromFeed} />
+                masterFeedElement
               )}
             </div>
           </div>
@@ -1111,15 +1196,8 @@ export default function Home() {
       {/* Sidebar */}
       {showSidebar && (
         <Sidebar
-          user={user}
-          setUser={setUser}
-          tables={tables}
-          selectedSchema={selectedSchema}
-          setSelectedSchema={setSelectedSchema}
-          selectedTable={selectedTable}
+          {...sidebarProps}
           setSelectedTable={setSelectedTable}
-          setSelectedRow={setSelectedRow}
-          setRows={setRows}
         />
       )}
 
@@ -1180,6 +1258,7 @@ export default function Home() {
               selectedTable={viewTable}
               fkLookups={fkLookups}
               headingComponents={headingComponents}
+              workspaceId={activeWorkspace.id}
               onFilterClick={(column, value) => {
                 if (column === "tags") {
                   setFilterTag(value);
@@ -1190,7 +1269,7 @@ export default function Home() {
               }}
             />
           ) : (
-            <MasterFeed onNavigate={navigateFromFeed} />
+            masterFeedElement
           )}
         </div>
       </div>

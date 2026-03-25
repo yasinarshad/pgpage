@@ -5,21 +5,21 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { TableRow } from "@/lib/types";
-import type { SchemaName } from "@/lib/supabase";
 import { getContentField, getTitle, slugify, wordCount, readingTime } from "@/lib/helpers";
 
 type ContentViewerProps = {
   selectedRow: TableRow;
-  selectedSchema: SchemaName;
+  selectedSchema: string;
   selectedTable: string;
   fkLookups: Record<string, Record<string, string>>;
   headingComponents: Record<string, React.ComponentType<React.HTMLAttributes<HTMLHeadingElement>>>;
   onFilterClick?: (column: string, value: string) => void;
   isMobile?: boolean;
+  workspaceId?: string;
 };
 
 export function ContentViewer({
-  selectedRow, selectedSchema, selectedTable, fkLookups, headingComponents, onFilterClick, isMobile,
+  selectedRow, selectedSchema, selectedTable, fkLookups, headingComponents, onFilterClick, isMobile, workspaceId,
 }: ContentViewerProps) {
   const contentField = getContentField(selectedRow);
   const contentStr = contentField ? String(selectedRow[contentField]) : "";
@@ -75,7 +75,10 @@ export function ContentViewer({
             <span
               className="cursor-pointer hover:text-zinc-300"
               onClick={() => {
-                const url = `${window.location.origin}${window.location.pathname}#${selectedSchema}/${selectedTable}/${selectedRow.id}`;
+                const hashPath = workspaceId
+                  ? `${workspaceId}/${selectedSchema}/${selectedTable}/${selectedRow.id}`
+                  : `${selectedSchema}/${selectedTable}/${selectedRow.id}`;
+                const url = `${window.location.origin}${window.location.pathname}#${hashPath}`;
                 navigator.clipboard.writeText(url);
               }}
               title="Click to copy URL"

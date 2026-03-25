@@ -1,6 +1,5 @@
 import type { TableRow, TocItem, FilterRule, ColType } from "./types";
-import type { SchemaName } from "./supabase";
-import { SCHEMAS } from "./supabase";
+import { WORKSPACES, findWorkspaceBySchema } from "./workspaces";
 
 export function extractToc(markdown: string): TocItem[] {
   const lines = markdown.split("\n");
@@ -66,26 +65,55 @@ export function resolveValue(col: string, value: unknown, fkMap: Record<string, 
   return s;
 }
 
-export function parseHash(): { schema?: SchemaName; table?: string; id?: string | number } {
+export function parseHash(): { workspaceId?: string; schema?: string; table?: string; id?: string | number } {
   if (typeof window === "undefined") return {};
   const hash = window.location.hash.slice(1);
   if (!hash) return {};
   const parts = hash.split("/");
-  const rawId = parts[2];
+
+  // Detect format: new = #workspaceId/schema/table/id, old = #schema/table/id
+  // If first segment matches a known schema from ANY workspace, treat as old format -> default to yasin-brain
+  const firstSegment = parts[0];
+  const matchedBySchema = findWorkspaceBySchema(firstSegment);
+
+  let workspaceId: string | undefined;
+  let schema: string | undefined;
+  let table: string | undefined;
+  let rawId: string | undefined;
+
+  if (matchedBySchema) {
+    // Old format: #schema/table/id — backwards compat, default to workspace that owns this schema
+    workspaceId = matchedBySchema.id;
+    schema = parts[0];
+    table = parts[1];
+    rawId = parts[2];
+  } else {
+    // New format: #workspaceId/schema/table/id
+    const ws = WORKSPACES.find((w) => w.id === firstSegment);
+    if (ws) {
+      workspaceId = ws.id;
+      schema = parts[1];
+      table = parts[2];
+      rawId = parts[3];
+    } else {
+      // Unknown first segment — treat as schema for backwards compat
+      schema = parts[0];
+      table = parts[1];
+      rawId = parts[2];
+    }
+  }
+
   let id: string | number | undefined;
   if (rawId) {
     const asNum = parseInt(rawId, 10);
     id = String(asNum) === rawId ? asNum : rawId;
   }
-  return {
-    schema: parts[0] as SchemaName | undefined,
-    table: parts[1],
-    id,
-  };
+
+  return { workspaceId, schema, table, id };
 }
 
-export function setHash(schema: string, table?: string, id?: string | number) {
-  const parts = [schema];
+export function setHash(workspaceId: string, schema: string, table?: string, id?: string | number) {
+  const parts = [workspaceId, schema];
   if (table) parts.push(table);
   if (id != null) parts.push(String(id));
   window.history.replaceState(null, "", `#${parts.join("/")}`);

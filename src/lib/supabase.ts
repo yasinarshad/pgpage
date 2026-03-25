@@ -1,16 +1,17 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
+const clientCache = new Map<string, SupabaseClient>();
+
+export function getSupabaseClient(url: string, anonKey: string): SupabaseClient {
+  const cacheKey = url;
+  if (!clientCache.has(cacheKey)) {
+    clientCache.set(cacheKey, createClient(url, anonKey));
+  }
+  return clientCache.get(cacheKey)!;
+}
+
+// Default client for backwards compat during transition
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
-
-export type SchemaName = "memdb" | "sessiondb" | "worlddb" | "yasin_info";
-
-export const SCHEMAS: { name: SchemaName; label: string }[] = [
-  { name: "memdb", label: "Memory DB" },
-  { name: "sessiondb", label: "Sessions" },
-  { name: "worlddb", label: "World DB" },
-  { name: "yasin_info", label: "Yasin Info" },
-];
-
