@@ -1,11 +1,25 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { TableRow } from "@/lib/types";
 import { getContentField, getTitle, slugify, wordCount, readingTime } from "@/lib/helpers";
+
+type Connection = {
+  id: number;
+  source_type: string;
+  source_id: number;
+  target_type: string;
+  target_id: number;
+  relationship: string;
+  note: string | null;
+  confidence: number | null;
+  target_schema: string | null;
+  target_title?: string;
+};
 
 type ContentViewerProps = {
   selectedRow: TableRow;
@@ -16,15 +30,58 @@ type ContentViewerProps = {
   onFilterClick?: (column: string, value: string) => void;
   isMobile?: boolean;
   workspaceId?: string;
+  supabase?: SupabaseClient;
 };
 
 export function ContentViewer({
-  selectedRow, selectedSchema, selectedTable, fkLookups, headingComponents, onFilterClick, isMobile, workspaceId,
+  selectedRow, selectedSchema, selectedTable, fkLookups, headingComponents, onFilterClick, isMobile, workspaceId, supabase,
 }: ContentViewerProps) {
   const contentField = getContentField(selectedRow);
   const contentStr = contentField ? String(selectedRow[contentField]) : "";
   const words = useMemo(() => wordCount(contentStr), [contentStr]);
   const minutes = useMemo(() => readingTime(words), [words]);
+
+  // Fetch connections for this row
+  const [connections, setConnections] = useState<Connection[]>([]);
+  useEffect(() => {
+    if (!supabase || selectedRow.id == null) { setConnections([]); return; }
+    const rowId = Number(selectedRow.id);
+    if (isNaN(rowId)) { setConnections([]); return; }
+
+    // Query connections table where this row is either source or target
+    supabase
+      .schema("memdb")
+      .from("memdb_connections")
+      .select("id,source_type,source_id,target_type,target_id,relationship,note,confidence,target_schema")
+      .or(`and(source_type.eq.${selectedTable},source_id.eq.${rowId}),and(target_type.eq.${selectedTable},target_id.eq.${rowId})`)
+      .then(async ({ data }) => {
+        if (!data || data.length === 0) { setConnections([]); return; }
+
+        // Normalize: make "the other side" always the target from this row's perspective
+        const normalized: Connection[] = (data as Connection[]).map((c) => {
+          if (c.target_type === selectedTable && c.target_id === rowId) {
+            // This row is the target — flip to show the source as the connected entry
+            return { ...c, target_type: c.source_type, target_id: c.source_id, source_type: c.target_type, source_id: c.target_id };
+          }
+          return c;
+        });
+
+        // Fetch titles for connected entries
+        const titlePromises = normalized.map(async (conn) => {
+          const schema = conn.target_schema || "memdb";
+          const { data: row } = await supabase.rpc("pg_get_row", {
+            p_schema: schema,
+            p_table: conn.target_type,
+            row_id: String(conn.target_id),
+          });
+          const title = row ? (String((row as TableRow).title || (row as TableRow).database_title || (row as TableRow).name || (row as TableRow).category || `#${conn.target_id}`)) : `#${conn.target_id}`;
+          return { ...conn, target_title: title };
+        });
+
+        const withTitles = await Promise.all(titlePromises);
+        setConnections(withTitles);
+      });
+  }, [supabase, selectedRow.id, selectedTable]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clickable = "cursor-pointer hover:text-zinc-200 transition-colors";
 
@@ -196,6 +253,56 @@ export function ContentViewer({
           {contentStr}
         </ReactMarkdown>
       </div>
+
+      {/* Connected Threads */}
+      {connections.length > 0 && (
+        <div className="mt-8 pt-6 border-t border-zinc-800">
+          <h3 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+            <span>🔗</span> Connected Threads
+          </h3>
+          <div className="space-y-3">
+            {connections.map((conn) => {
+              const schema = conn.target_schema || "memdb";
+              const typePrefix: Record<string, string> = {
+                journals: "J", learnings: "L", decisions: "D", signals: "S",
+                business_plans: "BP", yasin_transcripts: "YT", content_mining: "CM",
+                content_favs: "CF", thoughts: "T", experiments: "EX", project_ideas: "PI",
+              };
+              const prefix = typePrefix[conn.target_type] || conn.target_type.toUpperCase().slice(0, 2);
+              const url = workspaceId
+                ? `#${workspaceId}/${schema}/${conn.target_type}/${conn.target_id}`
+                : `#${schema}/${conn.target_type}/${conn.target_id}`;
+
+              return (
+                <a
+                  key={`${conn.target_type}-${conn.target_id}`}
+                  href={url}
+                  className="block p-3 rounded-lg bg-zinc-900/50 border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/50 transition-colors"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-xs font-mono text-zinc-500 mt-0.5 shrink-0">
+                      {prefix}{conn.target_id}
+                    </span>
+                    <div className="min-w-0">
+                      <span className="text-sm text-zinc-200 font-medium">
+                        {conn.target_title}
+                      </span>
+                      <span className="ml-2 text-xs text-zinc-600">
+                        {conn.relationship.replace(/_/g, " ")}
+                      </span>
+                      {conn.note && (
+                        <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                          {conn.note}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

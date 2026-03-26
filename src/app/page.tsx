@@ -938,6 +938,7 @@ export default function Home() {
                     fkLookups={fkLookups}
                     headingComponents={headingComponents}
                     workspaceId={activeWorkspace.id}
+                    supabase={supabase}
                     onFilterClick={(column, value) => {
                       if (column === "tags") {
                         setFilterTag(value);
@@ -1119,6 +1120,7 @@ export default function Home() {
                   fkLookups={fkLookups}
                   headingComponents={headingComponents}
                   workspaceId={activeWorkspace.id}
+                    supabase={supabase}
                   onFilterClick={(column, value) => {
                     if (column === "tags") {
                       setFilterTag(value);
@@ -1259,6 +1261,7 @@ export default function Home() {
               fkLookups={fkLookups}
               headingComponents={headingComponents}
               workspaceId={activeWorkspace.id}
+                    supabase={supabase}
               onFilterClick={(column, value) => {
                 if (column === "tags") {
                   setFilterTag(value);
