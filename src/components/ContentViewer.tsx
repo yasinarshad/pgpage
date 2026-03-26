@@ -159,6 +159,7 @@ export function ContentViewer({
       {/* Collapsible note sections */}
       {(() => {
         const noteSections = [
+          { key: "synthesis", label: "🧠 Synthesis", openByDefault: true },
           { key: "yasin_notes", label: "📝 Yasin's Notes", openByDefault: true },
           { key: "key_takeaways", label: "💡 Key Takeaways", openByDefault: false },
           { key: "raw_notes", label: "📋 Raw Notes", openByDefault: false },
