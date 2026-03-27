@@ -19,6 +19,10 @@ const ALL_WORKSPACES: Workspace[] = [
       { name: "sessiondb", label: "Sessions" },
       { name: "worlddb", label: "World DB" },
       { name: "yasin_info", label: "Yasin Info" },
+      { name: "contentdb", label: "Content DB" },
+      { name: "_ai", label: "AI Architecture" },
+      { name: "relationship_crm", label: "Relationship CRM" },
+      { name: "books", label: "Books" },
     ],
     hasMasterFeed: true,
     schemaColors: {
@@ -26,6 +30,10 @@ const ALL_WORKSPACES: Workspace[] = [
       sessiondb: "bg-green-900/40 text-green-300",
       worlddb: "bg-purple-900/40 text-purple-300",
       yasin_info: "bg-amber-900/40 text-amber-300",
+      contentdb: "bg-rose-900/40 text-rose-300",
+      _ai: "bg-sky-900/40 text-sky-300",
+      relationship_crm: "bg-pink-900/40 text-pink-300",
+      books: "bg-emerald-900/40 text-emerald-300",
     },
   },
   {
