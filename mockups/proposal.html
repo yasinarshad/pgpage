@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>pgpage proposal — light/dark + all properties</title>
+<style>
+  /* ---------- design tokens ---------- */
+  :root[data-theme="dark"] {
+    --bg: #0a0a0d;
+    --bg-2: #101014;
+    --bg-3: #18181b;
+    --border: #27272a;
+    --border-2: #3f3f46;
+    --text: #d4d4d8;
+    --text-strong: #fafafa;
+    --text-muted: #71717a;
+    --text-faint: #52525b;
+    --accent: #60a5fa;
+    --tag-bg: #27272a;
+    --tag-text: #a1a1aa;
+    --quote-border: #3f3f46;
+    --code-bg: #27272a;
+    --link-hover: #fafafa;
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --bg-2: #f9fafb;
+    --bg-3: #f3f4f6;
+    --border: #e5e7eb;
+    --border-2: #d1d5db;
+    --text: #1f2937;
+    --text-strong: #0f172a;
+    --text-muted: #6b7280;
+    --text-faint: #9ca3af;
+    --accent: #2563eb;
+    --tag-bg: #f3f4f6;
+    --tag-text: #4b5563;
+    --quote-border: #d1d5db;
+    --code-bg: #f3f4f6;
+    --link-hover: #0f172a;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", sans-serif;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  /* ---------- top toolbar ---------- */
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+  }
+  .toolbar .left { display: flex; align-items: center; gap: 16px; }
+  .toolbar .crumb { font-size: 13px; color: var(--text-muted); }
+  .toolbar .crumb strong { color: var(--text); }
+  .theme-toggle {
+    background: var(--bg-3);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .theme-toggle:hover { border-color: var(--border-2); }
+
+  /* ---------- page container ---------- */
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+  }
+
+  /* ---------- header block ---------- */
+  h1.page-title {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-strong);
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    font-size: 12px; color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+  .meta-row .item { display: inline-flex; align-items: center; gap: 4px; }
+  .meta-row .clickable { cursor: pointer; }
+  .meta-row .clickable:hover { color: var(--text-strong); }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
+  .tag {
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .tag:hover { background: var(--border-2); color: var(--text-strong); }
+
+  /* ---------- collapsible section ---------- */
+  details {
+    margin: 16px 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-2);
+    overflow: hidden;
+  }
+  details > summary {
+    list-style: none;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before {
+    content: "▶";
+    font-size: 9px;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+  }
+  details[open] > summary::before { transform: rotate(90deg); }
+  details > .body {
+    padding: 4px 14px 14px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  /* ---------- NEW: all properties table ---------- */
+  .props-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    table-layout: fixed;
+  }
+  .props-table tr { border-bottom: 1px solid var(--border); }
+  .props-table tr:last-child { border-bottom: none; }
+  .props-table td {
+    padding: 8px 10px;
+    vertical-align: top;
+  }
+  .props-table td.key {
+    width: 32%;
+    color: var(--text-muted);
+    font-family: ui-monospace, "SF Mono", monospace;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .props-table td.val {
+    color: var(--text);
+    word-break: break-word;
+  }
+  .props-table td.val .null { color: var(--text-faint); font-style: italic; }
+  .props-table td.val .json { font-family: ui-monospace, monospace; font-size: 12px; color: var(--text-muted); }
+  .props-table td.val .copy {
+    cursor: pointer;
+    opacity: 0; transition: opacity 0.15s;
+    font-size: 11px;
+    color: var(--accent);
+    margin-left: 6px;
+  }
+  .props-table tr:hover td.val .copy { opacity: 1; }
+
+  /* ---------- prose ---------- */
+  .prose { font-size: 17px; line-height: 1.65; color: var(--text); }
+  .prose h1, .prose h2, .prose h3 {
+    color: var(--text-strong);
+    line-height: 1.3;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+  }
+  .prose h2 { font-size: 1.35em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  .prose h3 { font-size: 1.15em; }
+  .prose p { margin: 0.85em 0; }
+  .prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  .prose strong { color: var(--text-strong); }
+  .prose code:not(pre code) {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.875em;
+  }
+  .prose blockquote {
+    border-left: 3px solid var(--quote-border);
+    padding: 4px 0 4px 16px;
+    color: var(--text-muted);
+    margin: 1em 0;
+  }
+  .prose ul, .prose ol { padding-left: 1.5em; margin: 0.5em 0; }
+  .prose li { margin: 0.2em 0; }
+
+  /* ---------- connected threads (existing) ---------- */
+  .threads-section {
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .threads-section h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .thread {
+    display: block;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-2);
+    margin-bottom: 8px;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .thread:hover { border-color: var(--border-2); background: var(--bg-3); }
+  .thread .ref { font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-muted); }
+  .thread .title { color: var(--text-strong); font-weight: 500; }
+  .thread .rel { color: var(--text-faint); font-size: 11px; margin-left: 6px; }
+
+  /* ---------- callout for proposal note ---------- */
+  .proposal-note {
+    background: var(--bg-3);
+    border: 1px dashed var(--accent);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 8px 0 16px;
+  }
+  .proposal-note strong { color: var(--accent); }
+</style>
+</head>
+<body data-theme-loaded>
+<script>
+  // theme handling — default dark, persist to localStorage
+  const saved = localStorage.getItem("pgpage-mockup-theme") || "light";
+  document.documentElement.setAttribute("data-theme", saved);
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute("data-theme");
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("pgpage-mockup-theme", next);
+    document.getElementById("themeBtn").textContent = next === "dark" ? "☀ Light" : "🌙 Dark";
+  }
+  window.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("themeBtn").textContent = saved === "dark" ? "☀ Light" : "🌙 Dark";
+  });
+  // also clear any prior saved preference if you're testing the new default
+  // (uncomment to reset): localStorage.removeItem("pgpage-mockup-theme");
+</script>
+
+<div class="toolbar">
+  <div class="left">
+    <span class="crumb">memdb &rsaquo; <strong>journals</strong> &rsaquo; #128</span>
+  </div>
+  <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀ Light</button>
+</div>
+
+<div class="page">
+
+  <!-- TITLE + META -->
+  <h1 class="page-title">TEST — NocoDB URL audit</h1>
+  <div class="meta-row">
+    <span class="item">memdb/journals/128</span>
+    <span class="item">Added: 2026-04-26 17:37</span>
+    <span class="item clickable">Session: fe27c4a7…</span>
+    <span class="item clickable">Platform: openclaw-solomon</span>
+  </div>
+  <div class="tags">
+    <span class="tag">test</span>
+    <span class="tag">nocodb</span>
+  </div>
+
+  <!-- SYNTHESIS / NOTES (existing collapsibles) -->
+  <details open>
+    <summary>🧠 Synthesis</summary>
+    <div class="body prose">
+      <p>NocoDB exposes deep-link URLs of the form <code>brain.yasinarshad.com/&lt;workspace&gt;/&lt;base&gt;/&lt;table_id&gt;/&lt;view_id&gt;?rowId=&lt;id&gt;</code>. The slug after view_id is decorative — only the IDs route. Confirmed via journal #128 test.</p>
+    </div>
+  </details>
+
+  <!-- 🆕 NEW: All Properties -->
+  <div class="proposal-note">
+    <strong>NEW SECTION ↓</strong> "All Properties" — collapsed by default, expands to show every other column in this row. Click any value to copy. <code>NULL</code> shown grey/italic. JSON/array fields shown monospace.
+  </div>
+
+  <details>
+    <summary>📋 All Properties (24)</summary>
+    <div class="body" style="padding: 0;">
+      <table class="props-table">
+        <tr>
+          <td class="key">summary</td>
+          <td class="val">NocoDB deep-link URL test <span class="copy">copy</span></td>
+        </tr>
+        <tr>
+          <td class="key">parent_id</td>
+          <td class="val"><span class="null">NULL</span></td>
+        </tr>
+        <tr>
+          <td class="key">database_title</td>
+          <td class="val"><span class="null">NULL</span></td>
+        </tr>
+        <tr>
+          <td class="key">status</td>
+          <td class="val">normal</td>
+        </tr>
+        <tr>
+          <td class="key">session_timestamp</td>
+          <td class="val">2026-04-27 00:37:31+00</td>
+        </tr>
+        <tr>
+          <td class="key">created_at</td>
+          <td class="val">2026-04-27 00:37:31+00</td>
+        </tr>
+        <tr>
+          <td class="key">updated_at</td>
+          <td class="val">2026-04-27 00:37:31+00</td>
+        </tr>
+        <tr>
+          <td class="key">embedding</td>
+          <td class="val"><span class="json">[1536-dim vector — 0.012, -0.234, ...]</span></td>
+        </tr>
+        <tr>
+          <td class="key">search_vector</td>
+          <td class="val"><span class="json">'audit':4 'deep':7 'deep-link':6 'link':8 'nocodb':2,5 'test':1,…</span></td>
+        </tr>
+        <tr>
+          <td class="key">key_takeaways</td>
+          <td class="val"><span class="null">NULL</span></td>
+        </tr>
+        <tr>
+          <td class="key">raw_notes</td>
+          <td class="val"><span class="null">NULL</span></td>
+        </tr>
+      </table>
+    </div>
+  </details>
+
+  <!-- MAIN CONTENT -->
+  <div class="prose" style="margin-top: 24px;">
+    <p>Test entry to verify <strong>brain.yasinarshad.com</strong> URL generation. Safe to delete.</p>
+    <h2>What was tested</h2>
+    <ul>
+      <li>Public hostname routing through Cloudflare Tunnel</li>
+      <li>Cloudflare Access email gate (allow YasinArshad@gmail.com only)</li>
+      <li>NocoDB record API resolution by Postgres primary key</li>
+    </ul>
+    <h2>Result</h2>
+    <p>URL pattern <code>?rowId=128</code> opens the expanded record side panel correctly. Slug after view_id (<code>journals-journals</code>) is decorative; NocoDB ignores it.</p>
+    <blockquote>Only the IDs in the path matter. Even <code>xxx-xxx</code> works as the slug.</blockquote>
+  </div>
+
+  <!-- CONNECTED THREADS (existing) -->
+  <div class="threads-section">
+    <h3>🔗 Connected Threads</h3>
+    <a href="#" class="thread">
+      <span class="ref">L155</span> &nbsp;
+      <span class="title">Hybrid RAG research</span>
+      <span class="rel">builds on</span>
+    </a>
+    <a href="#" class="thread">
+      <span class="ref">D12</span> &nbsp;
+      <span class="title">memdb naming decision</span>
+      <span class="rel">same theme</span>
+    </a>
+  </div>
+
+</div>
+</body>
+</html>
