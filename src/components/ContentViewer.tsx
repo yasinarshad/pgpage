@@ -6,7 +6,8 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { TableRow } from "@/lib/types";
-import { getContentField, getTitle, slugify, wordCount, readingTime } from "@/lib/helpers";
+import { getContentField, getTitle, wordCount, readingTime } from "@/lib/helpers";
+import { AllProperties } from "./AllProperties";
 
 type Connection = {
   id: number;
@@ -83,226 +84,246 @@ export function ContentViewer({
       });
   }, [supabase, selectedRow.id, selectedTable]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clickable = "cursor-pointer hover:text-zinc-200 transition-colors";
-
+  // Container: theme-aware surface, narrower (720px) for prose readability on desktop.
   const containerClass = isMobile
     ? "px-4 py-4"
-    : "max-w-4xl mx-auto px-8 py-6";
+    : "max-w-[720px] mx-auto px-8 py-6";
 
   if (!contentField) {
     return (
-      <div className={containerClass}>
-        <h2 className="text-lg font-semibold mb-4">
-          {getTitle(selectedRow, fkLookups)}
-        </h2>
-        <pre className="text-sm text-zinc-400 whitespace-pre-wrap">
-          {JSON.stringify(selectedRow, null, 2)}
-        </pre>
+      <div className="pgpage-surface">
+        <div className={containerClass}>
+          <h2 className="text-lg font-semibold mb-4 pgpage-h1">
+            {getTitle(selectedRow, fkLookups)}
+          </h2>
+          <pre className="text-sm pgpage-meta whitespace-pre-wrap">
+            {JSON.stringify(selectedRow, null, 2)}
+          </pre>
+          <div className="mt-6">
+            <AllProperties
+              row={selectedRow}
+              fkLookups={fkLookups}
+              isMobile={isMobile}
+            />
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={containerClass}>
-      {/* Breadcrumb bar */}
-      <div className="mb-2">
-        <div className="text-xs text-zinc-500 flex items-center gap-1">
-          <span className="text-zinc-400">{selectedSchema}</span>
-          <span className="text-zinc-600">&rsaquo;</span>
-          <span className="text-zinc-400">{selectedTable}</span>
-          <span className="text-zinc-600">&rsaquo;</span>
-          <span className="text-zinc-300">#{String(selectedRow.id)}</span>
-        </div>
-        {words > 0 && (
-          <p className="text-[11px] text-zinc-600 mt-0.5">
-            {words.toLocaleString()} words &middot; {minutes} min read
-          </p>
-        )}
-      </div>
-
-      {/* Properties bar */}
-      <div className="mb-6 pb-4 border-b border-zinc-800">
-        {Boolean(selectedRow.title) && (
-          <h1 className="text-2xl font-bold text-zinc-100 mb-3">
-            {String(selectedRow.title)}
-          </h1>
-        )}
-        <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
-          {selectedRow.id != null && (
-            <span
-              className="cursor-pointer hover:text-zinc-300"
-              onClick={() => {
-                const hashPath = workspaceId
-                  ? `${workspaceId}/${selectedSchema}/${selectedTable}/${selectedRow.id}`
-                  : `${selectedSchema}/${selectedTable}/${selectedRow.id}`;
-                const url = `${window.location.origin}${window.location.pathname}#${hashPath}`;
-                navigator.clipboard.writeText(url);
-              }}
-              title="Click to copy URL"
-            >
-              {selectedSchema}/{selectedTable}/{String(selectedRow.id)}
-            </span>
-          )}
-          {Boolean(selectedRow.date_published) && (
-            <span>
-              Published:{" "}
-              {new Date(String(selectedRow.date_published)).toLocaleDateString()}
-            </span>
-          )}
-          {Boolean(selectedRow.created_at) && (
-            <span>
-              Added:{" "}
-              {new Date(String(selectedRow.created_at)).toLocaleString()}
-            </span>
-          )}
-          {Boolean(selectedRow.session_id) && String(selectedRow.session_id) !== "00000000-0000-0000-0000-000000000000" && (
-            <span
-              className={onFilterClick ? clickable : ""}
-              onClick={() => onFilterClick?.("session_id", String(selectedRow.session_id))}
-              title={onFilterClick ? "Click to see all entries from this session" : undefined}
-            >
-              Session: {String(selectedRow.session_id).slice(0, 8)}...
-            </span>
-          )}
-          {Boolean(selectedRow.platform) && (
-            <span
-              className={onFilterClick ? clickable : ""}
-              onClick={() => onFilterClick?.("platform", String(selectedRow.platform))}
-              title={onFilterClick ? "Click to filter by this platform" : undefined}
-            >
-              Platform: {String(selectedRow.platform)}
-            </span>
-          )}
-          {Boolean(selectedRow.topic) && (
-            <span
-              className={onFilterClick ? clickable : ""}
-              onClick={() => onFilterClick?.("topic", String(selectedRow.topic))}
-              title={onFilterClick ? "Click to filter by this topic" : undefined}
-            >
-              Topic: {String(selectedRow.topic)}
-            </span>
-          )}
-          {Object.entries(fkLookups).map(([col, lookup]) => {
-            const val = String(selectedRow[col] ?? "");
-            if (!lookup[val]) return null;
-            return (
-              <span
-                key={col}
-                className={onFilterClick ? clickable : ""}
-                onClick={() => onFilterClick?.(col, val)}
-                title={onFilterClick ? `Click to filter by ${lookup[val]}` : undefined}
-              >
-                {col.replace(/_id$/, "")}: {lookup[val]}
-              </span>
-            );
-          })}
-        </div>
-        {Array.isArray(selectedRow.tags) && (
-          <div className={`flex flex-wrap ${isMobile ? "gap-2" : "gap-1"} mt-2`}>
-            {(selectedRow.tags as string[]).map((tag) => (
-              <span
-                key={tag}
-                className={`${isMobile ? "px-3 py-1.5 text-sm" : "px-2 py-0.5 text-xs"} bg-zinc-800 text-zinc-400 rounded ${onFilterClick ? "cursor-pointer hover:bg-zinc-700 hover:text-zinc-200 transition-colors" : ""}`}
-                onClick={() => onFilterClick?.("tags", tag)}
-                title={onFilterClick ? `Click to filter by "${tag}"` : undefined}
-              >
-                {tag}
-              </span>
-            ))}
+    <div className="pgpage-surface">
+      <div className={containerClass}>
+        {/* Breadcrumb bar */}
+        <div className="mb-2">
+          <div className="text-xs pgpage-meta flex items-center gap-1">
+            <span className="pgpage-meta-strong">{selectedSchema}</span>
+            <span style={{ color: "var(--surface-text-faint)" }}>&rsaquo;</span>
+            <span className="pgpage-meta-strong">{selectedTable}</span>
+            <span style={{ color: "var(--surface-text-faint)" }}>&rsaquo;</span>
+            <span style={{ color: "var(--surface-text)" }}>#{String(selectedRow.id)}</span>
           </div>
-        )}
-      </div>
+          {words > 0 && (
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--surface-text-faint)" }}>
+              {words.toLocaleString()} words &middot; {minutes} min read
+            </p>
+          )}
+        </div>
 
-      {/* Collapsible note sections */}
-      {(() => {
-        const noteSections = [
-          { key: "synthesis", label: "🧠 Synthesis", openByDefault: true },
-          { key: "yasin_notes", label: "📝 Yasin's Notes", openByDefault: true },
-          { key: "key_takeaways", label: "💡 Key Takeaways", openByDefault: false },
-          { key: "raw_notes", label: "📋 Raw Notes", openByDefault: false },
-        ].filter(({ key }) => {
-          const val = selectedRow[key];
-          return val && typeof val === "string" && (val as string).trim().length > 0;
-        });
-        if (noteSections.length === 0) return null;
-        return (
-          <div className="mb-6 space-y-2">
-            {noteSections.map(({ key, label, openByDefault }) => (
-              <details key={key} className="mb-3" open={openByDefault || undefined}>
-                <summary className="text-sm font-medium text-zinc-300 cursor-pointer hover:text-zinc-100">
-                  {label}
-                </summary>
-                <div className="mt-2 pl-4 border-l-2 border-zinc-700 text-sm text-zinc-400 pgpage-prose">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {String(selectedRow[key])}
-                  </ReactMarkdown>
-                </div>
-              </details>
-            ))}
-          </div>
-        );
-      })()}
-
-      {/* Rendered markdown */}
-      <div className="pgpage-prose">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
-          components={headingComponents}
-        >
-          {contentStr}
-        </ReactMarkdown>
-      </div>
-
-      {/* Connected Threads */}
-      {connections.length > 0 && (
-        <div className="mt-8 pt-6 border-t border-zinc-800">
-          <h3 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
-            <span>🔗</span> Connected Threads
-          </h3>
-          <div className="space-y-3">
-            {connections.map((conn) => {
-              const schema = conn.target_schema || "memdb";
-              const typePrefix: Record<string, string> = {
-                journals: "J", learnings: "L", decisions: "D", signals: "S",
-                business_plans: "BP", yasin_transcripts: "YT", content_mining: "CM",
-                content_favs: "CF", thoughts: "T", experiments: "EX", project_ideas: "PI",
-              };
-              const prefix = typePrefix[conn.target_type] || conn.target_type.toUpperCase().slice(0, 2);
-              const url = workspaceId
-                ? `#${workspaceId}/${schema}/${conn.target_type}/${conn.target_id}`
-                : `#${schema}/${conn.target_type}/${conn.target_id}`;
-
+        {/* Properties bar */}
+        <div className="mb-6 pb-4 border-b pgpage-divider">
+          {Boolean(selectedRow.title) && (
+            <h1 className="text-2xl mb-3 pgpage-h1">
+              {String(selectedRow.title)}
+            </h1>
+          )}
+          <div className="flex flex-wrap gap-4 text-xs pgpage-meta">
+            {selectedRow.id != null && (
+              <span
+                className="pgpage-meta-clickable"
+                onClick={() => {
+                  const hashPath = workspaceId
+                    ? `${workspaceId}/${selectedSchema}/${selectedTable}/${selectedRow.id}`
+                    : `${selectedSchema}/${selectedTable}/${selectedRow.id}`;
+                  const url = `${window.location.origin}${window.location.pathname}#${hashPath}`;
+                  navigator.clipboard.writeText(url);
+                }}
+                title="Click to copy URL"
+              >
+                {selectedSchema}/{selectedTable}/{String(selectedRow.id)}
+              </span>
+            )}
+            {Boolean(selectedRow.date_published) && (
+              <span>
+                Published:{" "}
+                {new Date(String(selectedRow.date_published)).toLocaleDateString()}
+              </span>
+            )}
+            {Boolean(selectedRow.created_at) && (
+              <span>
+                Added:{" "}
+                {new Date(String(selectedRow.created_at)).toLocaleString()}
+              </span>
+            )}
+            {Boolean(selectedRow.session_id) && String(selectedRow.session_id) !== "00000000-0000-0000-0000-000000000000" && (
+              <span
+                className={onFilterClick ? "pgpage-meta-clickable" : ""}
+                onClick={() => onFilterClick?.("session_id", String(selectedRow.session_id))}
+                title={onFilterClick ? "Click to see all entries from this session" : undefined}
+              >
+                Session: {String(selectedRow.session_id).slice(0, 8)}...
+              </span>
+            )}
+            {Boolean(selectedRow.platform) && (
+              <span
+                className={onFilterClick ? "pgpage-meta-clickable" : ""}
+                onClick={() => onFilterClick?.("platform", String(selectedRow.platform))}
+                title={onFilterClick ? "Click to filter by this platform" : undefined}
+              >
+                Platform: {String(selectedRow.platform)}
+              </span>
+            )}
+            {Boolean(selectedRow.topic) && (
+              <span
+                className={onFilterClick ? "pgpage-meta-clickable" : ""}
+                onClick={() => onFilterClick?.("topic", String(selectedRow.topic))}
+                title={onFilterClick ? "Click to filter by this topic" : undefined}
+              >
+                Topic: {String(selectedRow.topic)}
+              </span>
+            )}
+            {Object.entries(fkLookups).map(([col, lookup]) => {
+              const val = String(selectedRow[col] ?? "");
+              if (!lookup[val]) return null;
               return (
-                <a
-                  key={`${conn.target_type}-${conn.target_id}`}
-                  href={url}
-                  className="block p-3 rounded-lg bg-zinc-900/50 border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/50 transition-colors"
+                <span
+                  key={col}
+                  className={onFilterClick ? "pgpage-meta-clickable" : ""}
+                  onClick={() => onFilterClick?.(col, val)}
+                  title={onFilterClick ? `Click to filter by ${lookup[val]}` : undefined}
                 >
-                  <div className="flex items-start gap-2">
-                    <span className="text-xs font-mono text-zinc-500 mt-0.5 shrink-0">
-                      {prefix}{conn.target_id}
-                    </span>
-                    <div className="min-w-0">
-                      <span className="text-sm text-zinc-200 font-medium">
-                        {conn.target_title}
-                      </span>
-                      <span className="ml-2 text-xs text-zinc-600">
-                        {conn.relationship.replace(/_/g, " ")}
-                      </span>
-                      {conn.note && (
-                        <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                          {conn.note}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </a>
+                  {col.replace(/_id$/, "")}: {lookup[val]}
+                </span>
               );
             })}
           </div>
+          {Array.isArray(selectedRow.tags) && (
+            <div className={`flex flex-wrap ${isMobile ? "gap-2" : "gap-1"} mt-2`}>
+              {(selectedRow.tags as string[]).map((tag) => (
+                <span
+                  key={tag}
+                  className={`pgpage-tag ${isMobile ? "px-3 py-1.5 text-sm" : "px-2 py-0.5 text-xs"}`}
+                  onClick={() => onFilterClick?.("tags", tag)}
+                  title={onFilterClick ? `Click to filter by "${tag}"` : undefined}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Collapsible note sections */}
+        {(() => {
+          const noteSections = [
+            { key: "synthesis", label: "🧠 Synthesis", openByDefault: true },
+            { key: "yasin_notes", label: "📝 Yasin's Notes", openByDefault: true },
+            { key: "key_takeaways", label: "💡 Key Takeaways", openByDefault: false },
+            { key: "raw_notes", label: "📋 Raw Notes", openByDefault: false },
+          ].filter(({ key }) => {
+            const val = selectedRow[key];
+            return val && typeof val === "string" && (val as string).trim().length > 0;
+          });
+          if (noteSections.length === 0) return null;
+          return (
+            <div className="mb-6 space-y-2">
+              {noteSections.map(({ key, label, openByDefault }) => (
+                <details key={key} className="mb-3" open={openByDefault || undefined}>
+                  <summary className="text-sm font-medium pgpage-section-summary">
+                    {label}
+                  </summary>
+                  <div
+                    className="mt-2 pl-4 border-l-2 text-sm pgpage-prose"
+                    style={{ borderColor: "var(--surface-border-2)" }}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {String(selectedRow[key])}
+                    </ReactMarkdown>
+                  </div>
+                </details>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* All Properties — every other column */}
+        <AllProperties
+          row={selectedRow}
+          fkLookups={fkLookups}
+          isMobile={isMobile}
+        />
+
+        {/* Rendered markdown */}
+        <div className="pgpage-prose mt-6">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+            components={headingComponents}
+          >
+            {contentStr}
+          </ReactMarkdown>
+        </div>
+
+        {/* Connected Threads */}
+        {connections.length > 0 && (
+          <div className="mt-8 pt-6 border-t pgpage-divider">
+            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 pgpage-h1">
+              <span>🔗</span> Connected Threads
+            </h3>
+            <div className="space-y-3">
+              {connections.map((conn) => {
+                const schema = conn.target_schema || "memdb";
+                const typePrefix: Record<string, string> = {
+                  journals: "J", learnings: "L", decisions: "D", signals: "S",
+                  business_plans: "BP", yasin_transcripts: "YT", content_mining: "CM",
+                  content_favs: "CF", thoughts: "T", experiments: "EX", project_ideas: "PI",
+                };
+                const prefix = typePrefix[conn.target_type] || conn.target_type.toUpperCase().slice(0, 2);
+                const url = workspaceId
+                  ? `#${workspaceId}/${schema}/${conn.target_type}/${conn.target_id}`
+                  : `#${schema}/${conn.target_type}/${conn.target_id}`;
+
+                return (
+                  <a
+                    key={`${conn.target_type}-${conn.target_id}`}
+                    href={url}
+                    className="block p-3 pgpage-thread"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="pgpage-thread-ref mt-0.5 shrink-0">
+                        {prefix}{conn.target_id}
+                      </span>
+                      <div className="min-w-0">
+                        <span className="text-sm pgpage-thread-title">
+                          {conn.target_title}
+                        </span>
+                        <span className="ml-2 pgpage-thread-rel">
+                          {conn.relationship.replace(/_/g, " ")}
+                        </span>
+                        {conn.note && (
+                          <p className="pgpage-thread-note mt-1 leading-relaxed">
+                            {conn.note}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

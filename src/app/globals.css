@@ -1,11 +1,76 @@
 @import "tailwindcss";
+
+/* ============================================================
+   Theme tokens (CSS variables)
+   - :root           = LIGHT defaults
+   - [data-theme=dark] = dark overrides
+   These ONLY drive .pgpage-surface + .pgpage-prose.
+   App chrome (sidebars, toolbars) keeps its existing dark Tailwind classes.
+   ============================================================ */
+
+:root {
+  /* light surface */
+  --surface-bg: #ffffff;
+  --surface-bg-2: #f9fafb;
+  --surface-bg-3: #f3f4f6;
+  --surface-border: #e5e7eb;
+  --surface-border-2: #d1d5db;
+  --surface-text: #1f2937;
+  --surface-text-strong: #0f172a;
+  --surface-text-muted: #6b7280;
+  --surface-text-faint: #9ca3af;
+  --surface-accent: #2563eb;
+  --surface-tag-bg: #f3f4f6;
+  --surface-tag-text: #4b5563;
+  --surface-quote-border: #d1d5db;
+  --surface-code-bg: #f3f4f6;
+  --surface-code-text: #1f2937;
+  --surface-link-hover: #0f172a;
+  --surface-thread-bg: #f9fafb;
+  --surface-thread-bg-hover: #f3f4f6;
+  --surface-pre-bg: #f9fafb;
+  --surface-pre-border: #e5e7eb;
+}
+
+[data-theme="dark"] {
+  /* dark surface — matches the original look exactly */
+  --surface-bg: #0a0a0d;
+  --surface-bg-2: #18181b;
+  --surface-bg-3: #27272a;
+  --surface-border: #27272a;
+  --surface-border-2: #3f3f46;
+  --surface-text: #d4d4d8;
+  --surface-text-strong: #fafafa;
+  --surface-text-muted: #a1a1aa;
+  --surface-text-faint: #71717a;
+  --surface-accent: #60a5fa;
+  --surface-tag-bg: #27272a;
+  --surface-tag-text: #a1a1aa;
+  --surface-quote-border: #3f3f46;
+  --surface-code-bg: #27272a;
+  --surface-code-text: #e4e4e7;
+  --surface-link-hover: #fafafa;
+  --surface-thread-bg: rgba(24, 24, 27, 0.5);
+  --surface-thread-bg-hover: rgba(39, 39, 42, 0.5);
+  --surface-pre-bg: #18181b;
+  --surface-pre-border: #27272a;
+}
+
+/* highlight.js: dark theme always (we override prose code colors via vars) */
 @import "highlight.js/styles/github-dark.css";
+
+[data-theme="light"] .pgpage-prose pre code.hljs {
+  /* in light mode, swap to a lighter syntax theme by inverting the github-dark scheme just for prose */
+  filter: invert(0.92) hue-rotate(180deg);
+}
 
 body {
   margin: 0;
 }
 
-/* Loading skeleton animation */
+/* ============================================================
+   Loading skeleton animation (unchanged)
+   ============================================================ */
 @keyframes pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.15; }
@@ -14,10 +79,24 @@ body {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-/* Markdown prose styling for dark mode */
+/* ============================================================
+   .pgpage-surface — the themed reading surface
+   Wraps ContentViewer. All chrome OUTSIDE this stays dark.
+   ============================================================ */
+.pgpage-surface {
+  background: var(--surface-bg);
+  color: var(--surface-text);
+  transition: background 0.15s, color 0.15s;
+  min-height: 100%;
+}
+
+/* ============================================================
+   .pgpage-prose — markdown rendering
+   ============================================================ */
 .pgpage-prose {
-  color: #d4d4d8;
-  line-height: 1.25;
+  color: var(--surface-text);
+  line-height: 1.65;
+  font-size: 17px;
   max-width: none;
 }
 
@@ -25,28 +104,34 @@ body {
 .pgpage-prose h2,
 .pgpage-prose h3,
 .pgpage-prose h4 {
-  color: #fafafa;
+  color: var(--surface-text-strong);
   font-weight: 600;
+  line-height: 1.3;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
 }
 
-.pgpage-prose h1 { font-size: 2em; }
-.pgpage-prose h2 { font-size: 1.5em; border-bottom: 1px solid #27272a; padding-bottom: 0.3em; }
-.pgpage-prose h3 { font-size: 1.25em; }
+.pgpage-prose h1 { font-size: 1.875em; }
+.pgpage-prose h2 {
+  font-size: 1.4em;
+  border-bottom: 1px solid var(--surface-border);
+  padding-bottom: 0.3em;
+}
+.pgpage-prose h3 { font-size: 1.2em; }
 
-.pgpage-prose p { margin: 0.75em 0; }
+.pgpage-prose p { margin: 0.85em 0; }
 
 .pgpage-prose a {
-  color: #60a5fa;
+  color: var(--surface-accent);
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
-.pgpage-prose strong { color: #fafafa; }
+.pgpage-prose strong { color: var(--surface-text-strong); }
 
 .pgpage-prose pre {
-  background: #18181b;
-  border: 1px solid #27272a;
+  background: var(--surface-pre-bg);
+  border: 1px solid var(--surface-pre-border);
   border-radius: 8px;
   padding: 1em;
   overflow-x: auto;
@@ -54,11 +139,11 @@ body {
 }
 
 .pgpage-prose code:not(pre code) {
-  background: #27272a;
+  background: var(--surface-code-bg);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.875em;
-  color: #e4e4e7;
+  color: var(--surface-code-text);
 }
 
 .pgpage-prose pre code {
@@ -80,13 +165,8 @@ body {
   margin: 0;
 }
 
-.pgpage-prose ul ul {
-  list-style-type: circle;
-}
-
-.pgpage-prose ul ul ul {
-  list-style-type: square;
-}
+.pgpage-prose ul ul { list-style-type: circle; }
+.pgpage-prose ul ul ul { list-style-type: square; }
 
 .pgpage-prose ol {
   padding-left: 1.5em;
@@ -94,13 +174,13 @@ body {
   list-style-type: decimal;
 }
 
-.pgpage-prose li { margin: 0.1em 0; }
+.pgpage-prose li { margin: 0.2em 0; }
 .pgpage-prose li p { margin: 0; }
 
 .pgpage-prose blockquote {
-  border-left: 3px solid #3f3f46;
+  border-left: 3px solid var(--surface-quote-border);
   padding-left: 1em;
-  color: #a1a1aa;
+  color: var(--surface-text-muted);
   margin: 1em 0;
 }
 
@@ -112,20 +192,20 @@ body {
 
 .pgpage-prose th,
 .pgpage-prose td {
-  border: 1px solid #3f3f46;
+  border: 1px solid var(--surface-border);
   padding: 8px 12px;
   text-align: left;
 }
 
 .pgpage-prose th {
-  background: #18181b;
+  background: var(--surface-bg-2);
   font-weight: 600;
-  color: #fafafa;
+  color: var(--surface-text-strong);
 }
 
 .pgpage-prose hr {
   border: none;
-  border-top: 1px solid #27272a;
+  border-top: 1px solid var(--surface-border);
   margin: 2em 0;
 }
 
@@ -134,18 +214,145 @@ body {
   border-radius: 8px;
 }
 
-/* highlight.js overrides to match dark theme */
+/* highlight.js prose-scoped reset */
 .pgpage-prose pre code.hljs {
   background: transparent;
   padding: 0;
 }
 
-/* Safe area padding for bottom nav on notched iPhones */
+/* ============================================================
+   AllProperties table (used by AllProperties.tsx)
+   ============================================================ */
+.pgpage-props-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+.pgpage-props-table tr {
+  border-bottom: 1px solid var(--surface-border);
+}
+.pgpage-props-table tr:last-child { border-bottom: none; }
+.pgpage-props-table td {
+  padding: 8px 10px;
+  vertical-align: top;
+}
+.pgpage-props-table td.key {
+  width: 32%;
+  color: var(--surface-text-muted);
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+.pgpage-props-table td.val {
+  color: var(--surface-text);
+  word-break: break-word;
+}
+.pgpage-props-table td.val .pgpage-null {
+  color: var(--surface-text-faint);
+  font-style: italic;
+}
+.pgpage-props-table td.val .pgpage-mono {
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 12px;
+  color: var(--surface-text-muted);
+  white-space: pre-wrap;
+}
+.pgpage-props-table td.val .pgpage-copy {
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  font-size: 11px;
+  color: var(--surface-accent);
+  margin-left: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.pgpage-props-table tr:hover td.val .pgpage-copy { opacity: 1; }
+
+/* ============================================================
+   Surface-aware utility classes for ContentViewer chrome
+   (used in place of bg-zinc-* / text-zinc-* inside .pgpage-surface)
+   ============================================================ */
+.pgpage-surface .pgpage-meta { color: var(--surface-text-muted); font-size: 12px; }
+.pgpage-surface .pgpage-meta-strong { color: var(--surface-text); }
+.pgpage-surface .pgpage-meta-clickable {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.pgpage-surface .pgpage-meta-clickable:hover { color: var(--surface-text-strong); }
+
+.pgpage-surface .pgpage-tag {
+  background: var(--surface-tag-bg);
+  color: var(--surface-tag-text);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pgpage-surface .pgpage-tag:hover {
+  background: var(--surface-border-2);
+  color: var(--surface-text-strong);
+}
+
+.pgpage-surface .pgpage-divider { border-color: var(--surface-border); }
+
+.pgpage-surface .pgpage-section-card {
+  background: var(--surface-bg-2);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+}
+
+.pgpage-surface .pgpage-section-summary {
+  color: var(--surface-text);
+  cursor: pointer;
+}
+.pgpage-surface .pgpage-section-summary:hover { color: var(--surface-text-strong); }
+
+.pgpage-surface .pgpage-section-body { color: var(--surface-text); }
+
+.pgpage-surface .pgpage-thread {
+  background: var(--surface-thread-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.pgpage-surface .pgpage-thread:hover {
+  background: var(--surface-thread-bg-hover);
+  border-color: var(--surface-border-2);
+}
+
+.pgpage-surface .pgpage-thread-ref {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--surface-text-muted);
+}
+.pgpage-surface .pgpage-thread-title {
+  color: var(--surface-text-strong);
+  font-weight: 500;
+}
+.pgpage-surface .pgpage-thread-rel {
+  color: var(--surface-text-faint);
+  font-size: 11px;
+}
+.pgpage-surface .pgpage-thread-note {
+  color: var(--surface-text-muted);
+  font-size: 12px;
+}
+
+.pgpage-surface .pgpage-h1 {
+  color: var(--surface-text-strong);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================
+   Safe area + custom (kept from original)
+   ============================================================ */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Zinc-925 custom color (between 900 and 950) */
 .bg-zinc-925 {
   background-color: #101014;
 }

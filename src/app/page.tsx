@@ -14,6 +14,7 @@ import { useMobileView } from "@/lib/useMobile";
 
 import { LoginScreen } from "@/components/LoginScreen";
 import { Sidebar } from "@/components/Sidebar";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { RowList } from "@/components/RowList";
 import { ContentViewer } from "@/components/ContentViewer";
 import { TOCSidebar } from "@/components/TOCSidebar";
@@ -1190,6 +1191,9 @@ export default function Home() {
           &para;
         </button>
         <div className="flex-1" />
+        <div className="mb-2">
+          <ThemeToggle />
+        </div>
         <div className="mb-3">
           <HelpButton />
         </div>
